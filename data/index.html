@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Fan - Dashboard</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Hệ Thống Quạt Thông Minh</h1>
+      <p>Node ESP32 Monitoring & Control</p>
+      <div class="status-badge">
+        <span id="ws-dot" class="dot"></span>
+        <span id="ws-status">Đang kết nối...</span>
+      </div>
+    </header>
+
+    <!-- Cảm biến -->
+    <main class="sensor-grid">
+      <div class="glass-panel sensor-card temp">
+        <span class="card-title">Nhiệt Độ</span>
+        <div class="card-value" id="val-temp">--.-</div>
+        <span class="card-unit">°C</span>
+      </div>
+      <div class="glass-panel sensor-card humi">
+        <span class="card-title">Độ Ẩm</span>
+        <div class="card-value" id="val-humi">--.-</div>
+        <span class="card-unit">% RH</span>
+      </div>
+    </main>
+
+    <!-- Khối Điều Khiển Tốc Độ & Chế Độ Quạt -->
+    <section class="glass-panel">
+      <div class="section-header">
+        <span class="section-title">Chế Độ Quạt</span>
+        <div class="mode-switch">
+          <button type="button" class="mode-btn active" id="btn-manual" onclick="setMode('MANUAL')">Thủ Công</button>
+          <button type="button" class="mode-btn" id="btn-auto" onclick="setMode('AUTO')">Tự Động</button>
+        </div>
+      </div>
+
+      <!-- Panel Chế Độ Thủ Công -->
+      <div id="panel-manual">
+        <div class="ctrl-group">
+          <div class="ctrl-label">
+            <span>Tốc Độ Quạt Thủ Công</span>
+            <span class="ctrl-val-display" id="disp-fan-speed">0%</span>
+          </div>
+          <input type="range" id="slider-fan" min="0" max="100" value="0" oninput="onFanSlider(this.value)" onchange="sendControl()">
+        </div>
+      </div>
+
+      <!-- Panel Chế Độ Tự Động (2 Nấc Nhiệt Độ) -->
+      <div id="panel-auto" style="display: none;">
+        <div class="auto-rule-box">
+          <span class="rule-title">⚡ Nấc 1 (Mức Vừa)</span>
+          <div class="rule-grid">
+            <div>
+              <label>Kích hoạt từ (°C)</label>
+              <input type="number" id="cfg-t1" min="15" max="50" value="28" onchange="sendAutoConfig()">
+            </div>
+            <div>
+              <label>Tốc độ quạt (%)</label>
+              <input type="number" id="cfg-s1" min="1" max="100" value="50" onchange="sendAutoConfig()">
+            </div>
+          </div>
+        </div>
+
+        <div class="auto-rule-box" style="margin-top: 10px;">
+          <span class="rule-title">🔥 Nấc 2 (Mức Mạnh)</span>
+          <div class="rule-grid">
+            <div>
+              <label>Kích hoạt từ (°C)</label>
+              <input type="number" id="cfg-t2" min="15" max="50" value="32" onchange="sendAutoConfig()">
+            </div>
+            <div>
+              <label>Tốc độ quạt (%)</label>
+              <input type="number" id="cfg-s2" min="1" max="100" value="100" onchange="sendAutoConfig()">
+            </div>
+          </div>
+        </div>
+        <p class="rule-hint">* Nhiệt độ dưới Nấc 1 quạt sẽ tự động tắt (0%).</p>
+      </div>
+    </section>
+
+    <!-- Khối Điều Hướng Gió (Chạy độc lập cho cả Manual & Auto) -->
+    <section class="glass-panel">
+      <div class="section-header">
+        <span class="section-title">Điều Hướng Gió</span>
+      </div>
+
+      <!-- Toggle Đảo Gió -->
+      <div class="ctrl-group">
+        <div class="switch-wrapper">
+          <span style="font-size: 0.85rem; font-weight: 500;">Đảo Gió Quét Tự Động</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-swing" onchange="onSwingToggle()">
+            <span class="slider-toggle"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Nút Chỉnh Góc Cố Định -->
+      <div class="ctrl-group" id="angle-ctrl-box">
+        <div class="ctrl-label">
+          <span>Góc Quay Cố Định</span>
+          <span class="ctrl-val-display" id="disp-angle">0°</span>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 8px;">
+          <button type="button" class="btn" style="flex: 1;" onclick="stepAngle(-15)">⮜ Trái (-15°)</button>
+          <button type="button" class="btn" style="flex: 1;" onclick="stepAngle(15)">Phải (+15°) ⮞</button>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="setZeroPoint()">
+          ⚙ Đặt vị trí này làm mốc 0°
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <script src="/script.js"></script>
+</body>
+</html>
