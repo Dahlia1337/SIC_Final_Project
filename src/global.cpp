@@ -15,3 +15,4 @@ String AP_PASS = "12345678";
 boolean isWifiConnected = false;
 
 String mdnsHost = "smartfan";
+int comfort_class = 1;

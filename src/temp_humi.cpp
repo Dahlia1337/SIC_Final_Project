@@ -48,7 +48,16 @@ void Send_data_webserver (float temp, float humi)
     doc["type"] = "sensor";
     doc["temp"] = temp;
     doc["humi"] = humi;
+    doc["comfort"] = comfort_class;
+    doc["is_auto"] = system_state;
     
+    switch (comfort_class) {
+        case 0: doc["comfort_label"] = "Lạnh (COLD)"; break;
+        case 1: doc["comfort_label"] = "Dễ chịu (COMFORT)"; break;
+        case 2: doc["comfort_label"] = "Nóng ẩm (WARM_HUMID)"; break;
+        case 3: doc["comfort_label"] = "Nóng gắt (HOT)"; break;
+        default: doc["comfort_label"] = "Đang phân tích..."; break;
+    }
     // {"type":"sensor","temp":30.4,"humi":70.9}
     
     String output;
