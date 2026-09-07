@@ -55,18 +55,14 @@ void task_lcd(void *pvParameters)
         }
         else
         {
-            snprintf(line1, sizeof(line1), "T:%4.1fC H:%3.0f%% ", glob_temperature, glob_humidity);
+            const char* comfort_labels[] = {"COLD", "COMF", "HUMID", "HOT "};
 
-            char mode_char = system_state ? 'A' : 'M'; 
+            // Dòng 1: Nhiệt độ + Độ ẩm
+            snprintf(line1, sizeof(line1), "T:%4.1fC H:%3.0f%%", glob_temperature, glob_humidity);
 
-            if (swing_mode_enable)
-            {
-                snprintf(line2, sizeof(line2), "[%c] F:%3d%% SW:ON", mode_char, fan_speed);
-            }
-            else
-            {
-                snprintf(line2, sizeof(line2), "[%c] F:%3d%% A:%+3d\xDF", mode_char, fan_speed, current_target_angle);
-            }
+            // Dòng 2: Chế độ, tốc độ quạt và Nhãn AI
+            char mode_char = system_state ? 'A' : 'M';
+            snprintf(line2, sizeof(line2), "[%c] F:%3d%% AI:%s", mode_char, fan_speed, comfort_labels[comfort_class]);
         }
 
         lcd.setCursor(0, 0);

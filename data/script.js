@@ -40,6 +40,49 @@ function onMessage(event) {
       const humiEl = document.getElementById('val-humi');
       if (tempEl && data.temp !== undefined) tempEl.innerText = parseFloat(data.temp).toFixed(1);
       if (humiEl && data.humi !== undefined) humiEl.innerText = parseFloat(data.humi).toFixed(1);
+      let comfortElem = document.getElementById("comfort-text");
+      let badgeElem = document.getElementById("comfort-badge");
+
+      if (comfortElem && badgeElem) {
+          // KIỂM TRA CHẾ ĐỘ AUTO
+          if (data.is_auto) {
+              // Đang ở chế độ AUTO -> Cập nhật AI Comfort bình thường
+              comfortElem.innerText = data.comfort_label || "Chưa xác định";
+
+              switch (data.comfort) {
+                  case 0: // COLD
+                      badgeElem.innerText = "Auto: Quạt tắt (0%)";
+                      badgeElem.style.backgroundColor = "#007bff"; // Xanh dương
+                      comfortElem.style.color = "#007bff";
+                      break;
+                  case 1: // COMFORT
+                      badgeElem.innerText = "Auto: Quạt êm (35%)";
+                      badgeElem.style.backgroundColor = "#28a745"; // Xanh lá
+                      comfortElem.style.color = "#28a745";
+                      break;
+                  case 2: // WARM_HUMID
+                      badgeElem.innerText = "Auto: Gió mạnh (70%)";
+                      badgeElem.style.backgroundColor = "#fd7e14"; // Vàng cam
+                      comfortElem.style.color = "#fd7e14";
+                      break;
+                  case 3: // HOT
+                      badgeElem.innerText = "Auto: Tối đa (100%)";
+                      badgeElem.style.backgroundColor = "#dc3545"; // Đỏ
+                      comfortElem.style.color = "#dc3545";
+                      break;
+                  default:
+                      badgeElem.style.backgroundColor = "#6c757d";
+                      comfortElem.style.color = "#333333";
+              }
+          } else {
+              // Đang ở chế độ MANUAL -> Vô hiệu hóa ô AI Comfort
+              comfortElem.innerText = "Chế độ thủ công";
+              comfortElem.style.color = "#6c757d";
+              badgeElem.innerText = "Điều khiển bằng tay (Manual)";
+              badgeElem.style.backgroundColor = "#6c757d";
+          }
+          badgeElem.style.color = "#ffffff";
+      }
     }
 
     // Cập nhật trạng thái quạt

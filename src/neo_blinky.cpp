@@ -31,3 +31,26 @@ void neo_animation(void *pvParameters)
         }
     }
 };
+
+void rgb_display_comfort(int comfort_state)
+{
+    switch (comfort_state)
+    {
+    case 0: // COLD -> Xanh dương
+        rgb.setPixelColor(0, rgb.Color(0, 50, 255));
+        break;
+    case 1: // COMFORT -> Xanh lá cây dịu
+        rgb.setPixelColor(0, rgb.Color(0, 255, 50));
+        break;
+    case 2: // WARM_HUMID -> Vàng / Cam
+        rgb.setPixelColor(0, rgb.Color(255, 140, 0));
+        break;
+    case 3: // HOT -> Đỏ rực
+        rgb.setPixelColor(0, rgb.Color(255, 0, 0));
+        break;
+    default:
+        rgb.setPixelColor(0, rgb.Color(0, 0, 0)); // Tắt
+        break;
+    }
+    rgb.show();
+}

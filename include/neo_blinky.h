@@ -10,6 +10,7 @@ void rgb_control(int color);
 //void neo_blinky(void *pvParameters);
 
 void neo_animation(void *pvParameters);
+void rgb_display_comfort(int comfort_state);
 
 
 #endif

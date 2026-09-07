@@ -4,6 +4,7 @@
 #include "stepper_control.h"
 #include "component_control.h"
 #include <Preferences.h>
+#include "neo_blinky.h"
 
 Preferences auto_prefs;
 
@@ -116,40 +117,35 @@ void handleWebSocketMessage(String message)
 }
 
 // Logic kiểm tra & cập nhật tốc độ tự động (gọi tuần tự theo chu kỳ đo cảm biến)
-void update_auto_fan_logic()
-{
-    if (!system_state) return; // Đang ở MANUAL thì bỏ qua
+void update_auto_fan_logic() {
+    if (!system_state) return; // Nếu đang MANUAL thì bỏ qua
 
-    const float HYSTERESIS = 0.5; // Khoảng trễ nhiệt độ tránh bật tắt liên tục
     int target_speed = 0;
+    int neo_color_hue = 0; // Hue (0 - 65535)
 
-    // Phân nấc nhiệt độ với khoảng trễ
-    if (glob_temperature >= auto_t2) {
-        target_speed = auto_s2; // Nấc 2 (Mạnh)
-    } 
-    else if (glob_temperature >= auto_t1) {
-        // Nếu nhiệt độ rớt xuống dưới T2 nhưng chưa thấp hơn (T2 - HYSTERESIS)
-        // và trước đó đang chạy nấc 2 thì giữ nấc 2
-        if (fan_speed == auto_s2 && glob_temperature > (auto_t2 - HYSTERESIS)) {
-            target_speed = auto_s2;
-        } else {
-            target_speed = auto_s1; // Nấc 1 (Vừa)
-        }
-    } 
-    else {
-        // Nếu trước đó đang chạy nấc 1 nhưng nhiệt độ chưa rớt qua (T1 - HYSTERESIS)
-        // thì vẫn giữ nấc 1
-        if (fan_speed == auto_s1 && glob_temperature > (auto_t1 - HYSTERESIS)) {
-            target_speed = auto_s1;
-        } else {
-            target_speed = 0; // Dưới T1 tắt quạt
-        }
+    switch (comfort_class) {
+        case 0: // COLD -> Tắt quạt, đèn tím/xanh dương đậm
+            target_speed = 0;
+            neo_color_hue = 45000;
+            break;
+        case 1: // COMFORT -> Quạt thoang thoảng 35%, đèn xanh lá
+            target_speed = 35;
+            neo_color_hue = 21845;
+            break;
+        case 2: // WARM_HUMID -> Quạt 70%, đèn vàng/cam
+            target_speed = 70;
+            neo_color_hue = 10922;
+            break;
+        case 3: // HOT -> Quạt 100%, đèn đỏ
+            target_speed = 100;
+            neo_color_hue = 0;
+            break;
     }
 
-    // Chỉ xuất xung PWM và cập nhật khi tốc độ thay đổi
     if (fan_speed != target_speed) {
         fan_speed = target_speed;
         fan_control(fan_speed);
-        Serial.printf("🤖 [Auto Action] Temp: %.1fC -> Fan set: %d%%\n", glob_temperature, fan_speed);
     }
+    
+    rgb_control(neo_color_hue);
 }
