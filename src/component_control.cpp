@@ -33,7 +33,6 @@ void lcd_setup(){
 
 void task_lcd(void *pvParameters)
 {
-    sta_connected_millis = 0;
     lcd_setup();
     vTaskDelay(1500 / portTICK_PERIOD_MS);
     lcd.clear();
@@ -41,6 +40,7 @@ void task_lcd(void *pvParameters)
     char line1[17];
     char line2[17];
 
+    sta_connected_millis = millis();
     while (true)
     {
         if (isAPMode)
@@ -48,7 +48,7 @@ void task_lcd(void *pvParameters)
             snprintf(line1, sizeof(line1), "MODE: AP CONFIG ");
             snprintf(line2, sizeof(line2), "IP:%-13s", WiFi.softAPIP().toString().c_str());
         }
-        else if (millis() - sta_connected_millis < 10000)
+        else if (millis() - sta_connected_millis < 20000)
         {
             snprintf(line1, sizeof(line1), "WiFi Connected! ");
             snprintf(line2, sizeof(line2), "IP:%-13s", WiFi.localIP().toString().c_str());

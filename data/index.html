@@ -10,7 +10,7 @@
   <div class="container">
     <header>
       <h1>Hệ Thống Quạt Thông Minh</h1>
-      <p>Node ESP32 Monitoring & Control</p>
+      <p>Node ESP32 TinyML Monitoring & Control</p>
       <div class="status-badge">
         <span id="ws-dot" class="dot"></span>
         <span id="ws-status">Đang kết nối...</span>
@@ -30,21 +30,23 @@
         <span class="card-unit">% RH</span>
       </div>
     </main>
-    <!-- Card hiển thị trạng thái AI Comfort -->
-    <div class="card">
-        <div class="card-header">AI CLIMATE COMFORT</div>
-        <div class="card-body">
-            <h2 id="comfort-text" style="font-weight: bold; margin: 10px 0;">--</h2>
-            <span id="comfort-badge" class="badge badge-secondary" style="padding: 6px 12px; border-radius: 15px; font-size: 0.9em;">Chờ dữ liệu</span>
-        </div>
+
+    <!-- Card hiển thị trạng thái AI Comfort (TinyML) -->
+    <div class="glass-panel ai-card">
+      <span class="card-title">AI Climate Comfort (TinyML)</span>
+      <div class="ai-comfort-val" id="comfort-text">--</div>
+      <div>
+        <span id="comfort-badge" class="badge">Chờ dữ liệu...</span>
+      </div>
     </div>
+
     <!-- Khối Điều Khiển Tốc Độ & Chế Độ Quạt -->
     <section class="glass-panel">
       <div class="section-header">
         <span class="section-title">Chế Độ Quạt</span>
         <div class="mode-switch">
           <button type="button" class="mode-btn active" id="btn-manual" onclick="setMode('MANUAL')">Thủ Công</button>
-          <button type="button" class="mode-btn" id="btn-auto" onclick="setMode('AUTO')">Tự Động</button>
+          <button type="button" class="mode-btn" id="btn-auto" onclick="setMode('AUTO')">Tự Động (AI)</button>
         </div>
       </div>
 
@@ -59,40 +61,16 @@
         </div>
       </div>
 
-      <!-- Panel Chế Độ Tự Động (2 Nấc Nhiệt Độ) -->
+      <!-- Panel Chế Độ Tự Động: Chỉ báo hoạt động TinyML -->
       <div id="panel-auto" style="display: none;">
-        <div class="auto-rule-box">
-          <span class="rule-title">⚡ Nấc 1 (Mức Vừa)</span>
-          <div class="rule-grid">
-            <div>
-              <label>Kích hoạt từ (°C)</label>
-              <input type="number" id="cfg-t1" min="15" max="50" value="28" onchange="sendAutoConfig()">
-            </div>
-            <div>
-              <label>Tốc độ quạt (%)</label>
-              <input type="number" id="cfg-s1" min="1" max="100" value="50" onchange="sendAutoConfig()">
-            </div>
-          </div>
+        <div class="ai-info-box">
+          <p class="ai-info-title">🤖 TinyML Inference Active</p>
+          <p class="ai-info-desc">Tốc độ quạt đang được mô hình AI trên ESP32 tự động điều chỉnh tối ưu theo độ thoải mái môi trường.</p>
         </div>
-
-        <div class="auto-rule-box" style="margin-top: 10px;">
-          <span class="rule-title">🔥 Nấc 2 (Mức Mạnh)</span>
-          <div class="rule-grid">
-            <div>
-              <label>Kích hoạt từ (°C)</label>
-              <input type="number" id="cfg-t2" min="15" max="50" value="32" onchange="sendAutoConfig()">
-            </div>
-            <div>
-              <label>Tốc độ quạt (%)</label>
-              <input type="number" id="cfg-s2" min="1" max="100" value="100" onchange="sendAutoConfig()">
-            </div>
-          </div>
-        </div>
-        <p class="rule-hint">* Nhiệt độ dưới Nấc 1 quạt sẽ tự động tắt (0%).</p>
       </div>
     </section>
 
-    <!-- Khối Điều Hướng Gió (Chạy độc lập cho cả Manual & Auto) -->
+    <!-- Khối Điều Hướng Gió (Độc lập cho cả Manual & Auto) -->
     <section class="glass-panel">
       <div class="section-header">
         <span class="section-title">Điều Hướng Gió</span>
@@ -116,8 +94,8 @@
           <span class="ctrl-val-display" id="disp-angle">0°</span>
         </div>
         <div style="display: flex; gap: 10px; margin-top: 8px;">
-          <button type="button" class="btn" style="flex: 1;" onclick="stepAngle(-15)">⮜ Trái (-15°)</button>
-          <button type="button" class="btn" style="flex: 1;" onclick="stepAngle(15)">Phải (+15°) ⮞</button>
+          <button type="button" class="btn" style="flex: 1;" onclick="stepAngle(-10)">⮜ Trái (-10°)</button>
+          <button type="button" class="btn" style="flex: 1;" onclick="stepAngle(10)">Phải (+10°) ⮞</button>
         </div>
         <button type="button" class="btn btn-secondary" onclick="setZeroPoint()">
           ⚙ Đặt vị trí này làm mốc 0°

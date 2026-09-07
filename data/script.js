@@ -5,8 +5,7 @@ let systemState = {
   mode: "MANUAL",
   fan_speed: 0,
   swing_enable: false,
-  target_angle: 0,
-  auto_cfg: { t1: 28, s1: 50, t2: 32, s2: 100 }
+  target_angle: 0
 };
 
 window.addEventListener('load', initWebSocket);
@@ -34,58 +33,59 @@ function onMessage(event) {
   try {
     const data = JSON.parse(event.data);
     
-    // Cập nhật cảm biến
+    // 1. Cập nhật cảm biến & AI Climate Comfort
     if (data.type === 'sensor' || data.type === 'status') {
       const tempEl = document.getElementById('val-temp');
       const humiEl = document.getElementById('val-humi');
       if (tempEl && data.temp !== undefined) tempEl.innerText = parseFloat(data.temp).toFixed(1);
       if (humiEl && data.humi !== undefined) humiEl.innerText = parseFloat(data.humi).toFixed(1);
-      let comfortElem = document.getElementById("comfort-text");
-      let badgeElem = document.getElementById("comfort-badge");
+
+      const comfortElem = document.getElementById("comfort-text");
+      const badgeElem = document.getElementById("comfort-badge");
 
       if (comfortElem && badgeElem) {
-          // KIỂM TRA CHẾ ĐỘ AUTO
-          if (data.is_auto) {
-              // Đang ở chế độ AUTO -> Cập nhật AI Comfort bình thường
-              comfortElem.innerText = data.comfort_label || "Chưa xác định";
+        // Kiểm tra chế độ AUTO (hỗ trợ cả cờ is_auto hoặc data.mode === 'AUTO')
+        const isAuto = (data.is_auto !== undefined) ? data.is_auto : (data.mode === 'AUTO' || systemState.mode === 'AUTO');
 
-              switch (data.comfort) {
-                  case 0: // COLD
-                      badgeElem.innerText = "Auto: Quạt tắt (0%)";
-                      badgeElem.style.backgroundColor = "#007bff"; // Xanh dương
-                      comfortElem.style.color = "#007bff";
-                      break;
-                  case 1: // COMFORT
-                      badgeElem.innerText = "Auto: Quạt êm (35%)";
-                      badgeElem.style.backgroundColor = "#28a745"; // Xanh lá
-                      comfortElem.style.color = "#28a745";
-                      break;
-                  case 2: // WARM_HUMID
-                      badgeElem.innerText = "Auto: Gió mạnh (70%)";
-                      badgeElem.style.backgroundColor = "#fd7e14"; // Vàng cam
-                      comfortElem.style.color = "#fd7e14";
-                      break;
-                  case 3: // HOT
-                      badgeElem.innerText = "Auto: Tối đa (100%)";
-                      badgeElem.style.backgroundColor = "#dc3545"; // Đỏ
-                      comfortElem.style.color = "#dc3545";
-                      break;
-                  default:
-                      badgeElem.style.backgroundColor = "#6c757d";
-                      comfortElem.style.color = "#333333";
-              }
-          } else {
-              // Đang ở chế độ MANUAL -> Vô hiệu hóa ô AI Comfort
-              comfortElem.innerText = "Chế độ thủ công";
-              comfortElem.style.color = "#6c757d";
-              badgeElem.innerText = "Điều khiển bằng tay (Manual)";
-              badgeElem.style.backgroundColor = "#6c757d";
+        if (isAuto) {
+          comfortElem.innerText = data.comfort_label || "Đang phân tích...";
+
+          switch (data.comfort) {
+            case 0: // COLD
+              badgeElem.innerText = "Auto: Quạt tắt (0%)";
+              badgeElem.style.backgroundColor = "#3b82f6";
+              comfortElem.style.color = "#3b82f6";
+              break;
+            case 1: // COMFORT
+              badgeElem.innerText = "Auto: Quạt êm (35%)";
+              badgeElem.style.backgroundColor = "#10b981";
+              comfortElem.style.color = "#10b981";
+              break;
+            case 2: // WARM_HUMID
+              badgeElem.innerText = "Auto: Gió vừa (70%)";
+              badgeElem.style.backgroundColor = "#f97316";
+              comfortElem.style.color = "#f97316";
+              break;
+            case 3: // HOT
+              badgeElem.innerText = "Auto: Tối đa (100%)";
+              badgeElem.style.backgroundColor = "#ef4444";
+              comfortElem.style.color = "#ef4444";
+              break;
+            default:
+              badgeElem.style.backgroundColor = "#64748b";
+              comfortElem.style.color = "#94a3b8";
           }
-          badgeElem.style.color = "#ffffff";
+        } else {
+          comfortElem.innerText = "Chế độ thủ công";
+          comfortElem.style.color = "#94a3b8";
+          badgeElem.innerText = "Điều khiển bằng tay (Manual)";
+          badgeElem.style.backgroundColor = "#475569";
+        }
+        badgeElem.style.color = "#ffffff";
       }
     }
 
-    // Cập nhật trạng thái quạt
+    // 2. Đồng bộ trạng thái phần cứng từ ESP32
     if (data.type === 'status') {
       if (data.mode) syncModeUI(data.mode);
       if (data.fan_speed !== undefined) {
@@ -98,12 +98,6 @@ function onMessage(event) {
       }
       if (data.current_angle !== undefined) {
         document.getElementById('disp-angle').innerText = `${data.current_angle}°`;
-      }
-      if (data.auto_cfg) {
-        document.getElementById('cfg-t1').value = data.auto_cfg.t1;
-        document.getElementById('cfg-s1').value = data.auto_cfg.s1;
-        document.getElementById('cfg-t2').value = data.auto_cfg.t2;
-        document.getElementById('cfg-s2').value = data.auto_cfg.s2;
       }
     }
   } catch (err) {
@@ -181,29 +175,6 @@ function sendControl() {
       fan_speed: systemState.fan_speed,
       swing_enable: systemState.swing_enable,
       target_angle: systemState.target_angle
-    };
-    websocket.send(JSON.stringify(payload));
-  }
-}
-
-function sendAutoConfig() {
-  const t1 = parseFloat(document.getElementById('cfg-t1').value);
-  const s1 = parseInt(document.getElementById('cfg-s1').value);
-  const t2 = parseFloat(document.getElementById('cfg-t2').value);
-  const s2 = parseInt(document.getElementById('cfg-s2').value);
-
-  if (t1 >= t2) {
-    alert("Nhiệt độ nấc 1 phải nhỏ hơn nấc 2!");
-    return;
-  }
-
-  if (websocket && websocket.readyState === WebSocket.OPEN) {
-    const payload = {
-      cmd: "set_auto_cfg",
-      t1: t1,
-      s1: s1,
-      t2: t2,
-      s2: s2
     };
     websocket.send(JSON.stringify(payload));
   }

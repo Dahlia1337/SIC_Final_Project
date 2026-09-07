@@ -58,7 +58,6 @@ void Send_data_webserver (float temp, float humi)
         case 3: doc["comfort_label"] = "Nóng gắt (HOT)"; break;
         default: doc["comfort_label"] = "Đang phân tích..."; break;
     }
-    // {"type":"sensor","temp":30.4,"humi":70.9}
     
     String output;
     serializeJson(doc, output);
