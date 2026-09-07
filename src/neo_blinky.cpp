@@ -6,7 +6,7 @@ Adafruit_NeoPixel rgb(1, NEO_PIN, NEO_GRB + NEO_KHZ800);
 void rgb_setup()
 {
     rgb.begin();
-    rgb.setBrightness(10);
+    rgb.setBrightness(5);
 };
 
 void rgb_control(int color)

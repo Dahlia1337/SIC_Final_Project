@@ -14,7 +14,7 @@
 void setup()
 {
     Serial.begin(115200);
-    delay(10000);
+    delay(8000);
     Serial.println("------ ESP32 start ------");
     check_info_File(0);
     // Delete_info_File();

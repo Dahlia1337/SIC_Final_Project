@@ -15,7 +15,8 @@ void fan_setup()
 
 void fan_control(int state)
 {
-    analogWrite(FAN_PIN, state);
+    int speed = map(state, 0, 100, 0, 255);
+    analogWrite(FAN_PIN, speed);
 };
 
 void lcd_setup(){
@@ -32,6 +33,7 @@ void lcd_setup(){
 
 void task_lcd(void *pvParameters)
 {
+    sta_connected_millis = 0;
     lcd_setup();
     vTaskDelay(1500 / portTICK_PERIOD_MS);
     lcd.clear();
