@@ -3,30 +3,7 @@
 #include "task_webserver.h"
 #include "stepper_control.h"
 #include "component_control.h"
-#include <Preferences.h>
 #include "neo_blinky.h"
-
-Preferences auto_prefs;
-
-// Khai báo các ngưỡng nhiệt và tốc độ nấc Auto (lưu toàn cục)
-float auto_t1 = 28.0;
-int   auto_s1 = 50;
-float auto_t2 = 32.0;
-int   auto_s2 = 100;
-
-// Hàm tải cấu hình Auto từ NVS khi ESP32 khởi động
-void load_auto_config()
-{
-    auto_prefs.begin("fan_auto", false);
-    auto_t1 = auto_prefs.getFloat("t1", 28.0);
-    auto_s1 = auto_prefs.getInt("s1", 50);
-    auto_t2 = auto_prefs.getFloat("t2", 32.0);
-    auto_s2 = auto_prefs.getInt("s2", 100);
-    auto_prefs.end();
-
-    Serial.printf("⚙️ [Auto Config Loaded]: T1=%.1fC -> %d%% | T2=%.1fC -> %d%%\n",
-                  auto_t1, auto_s1, auto_t2, auto_s2);
-}
 
 void handleWebSocketMessage(String message)
 {
@@ -71,25 +48,7 @@ void handleWebSocketMessage(String message)
                 stepper_set_angle(angle);
             }
         }
-        // Nhận cài đặt ngưỡng 2 nấc nhiệt độ Auto
-        else if (cmd == "set_auto_cfg")
-        {
-            auto_t1 = doc["t1"] | 28.0;
-            auto_s1 = doc["s1"] | 50;
-            auto_t2 = doc["t2"] | 32.0;
-            auto_s2 = doc["s2"] | 100;
 
-            // Lưu trực tiếp vào Preferences (NVS)
-            auto_prefs.begin("fan_auto", false);
-            auto_prefs.putFloat("t1", auto_t1);
-            auto_prefs.putInt("s1", auto_s1);
-            auto_prefs.putFloat("t2", auto_t2);
-            auto_prefs.putInt("s2", auto_s2);
-            auto_prefs.end();
-
-            Serial.printf("💾 Đã lưu cấu hình Auto: T1=%.1fC -> %d%% | T2=%.1fC -> %d%%\n",
-                          auto_t1, auto_s1, auto_t2, auto_s2);
-        }
         else if (cmd == "calib_zero")
         {
             Serial.println("⚙️ Nhận lệnh đặt lại mốc 0°");

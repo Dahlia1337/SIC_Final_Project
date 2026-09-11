@@ -26,7 +26,6 @@ void stepper_init()
     stepper.setMaxSpeed(400.0);
     stepper.setAcceleration(200.0);
 
-    // Ánh xạ dải [-90, 90] sang [-512, 512]
     long initial_steps = map(current_target_angle, -90, 90, -STEPS_PER_90_DEG, STEPS_PER_90_DEG);
     stepper.setCurrentPosition(initial_steps);
     stepper.moveTo(initial_steps);

@@ -43,10 +43,6 @@ extern String mdnsHost;
 extern bool isAPMode;
 extern unsigned long sta_connected_millis;
 
-extern float auto_thresh_t1, auto_thresh_t2;
-extern int auto_speed_s1, auto_speed_s2;
-
 extern int comfort_class; // 0: COLD, 1: COMFORT, 2: WARM_HUMID, 3: HOT
-extern int comfort_class;
 
 #endif

@@ -25,7 +25,6 @@ void setup()
     led_setup();
     fan_setup();
     stepper_init();
-    load_auto_config();
 
     WiFi_Init();
     Webserver_reconnect();

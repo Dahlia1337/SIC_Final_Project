@@ -1,7 +1,5 @@
 #include "task_wifi.h"
 
-bool isAPMode = false;
-
 void startAP()
 {
     WiFi.disconnect(true);
