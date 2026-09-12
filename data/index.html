@@ -3,127 +3,267 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Fan - Dashboard</title>
+  <title>Smart Fan AI Dashboard - ESP32-S3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>Hệ Thống Quạt Thông Minh</h1>
-      <p>Node ESP32 Monitoring & Control</p>
-      <div class="status-badge">
-        <span id="ws-dot" class="dot"></span>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="main-header">
+      <div class="header-left">
+        <div class="logo-box">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 2a4 4 0 0 0-4 4c0 3 4 6 4 6s4-3 4-6a4 4 0 0 0-4-4z"></path>
+            <circle cx="12" cy="12" r="2"></circle>
+          </svg>
+        </div>
+        <div>
+          <h1>Smart Fan AI</h1>
+          <p class="subtitle">Hệ Thống Quạt Thông Minh Edge AI</p>
+        </div>
+      </div>
+      <div class="status-badge" id="ws-badge">
+        <span class="pulse-dot" id="ws-dot"></span>
         <span id="ws-status">Đang kết nối...</span>
       </div>
     </header>
 
-    <!-- Cảm biến -->
-    <main class="sensor-grid">
-      <div class="glass-panel sensor-card temp">
-        <span class="card-title">Nhiệt Độ</span>
-        <div class="card-value" id="val-temp">--.-</div>
-        <span class="card-unit">°C</span>
-      </div>
-      <div class="glass-panel sensor-card humi">
-        <span class="card-title">Độ Ẩm</span>
-        <div class="card-value" id="val-humi">--.-</div>
-        <span class="card-unit">% RH</span>
-      </div>
-    </main>
-    <!-- Card hiển thị trạng thái AI Comfort -->
-    <div class="card">
-        <div class="card-header">AI CLIMATE COMFORT</div>
-        <div class="card-body">
-            <h2 id="comfort-text" style="font-weight: bold; margin: 10px 0;">--</h2>
-            <span id="comfort-badge" class="badge badge-secondary" style="padding: 6px 12px; border-radius: 15px; font-size: 0.9em;">Chờ dữ liệu</span>
+    <!-- Top Grid: Sensors & AI Status -->
+    <div class="dashboard-grid">
+      <!-- Card Nhiệt độ -->
+      <div class="glass-card sensor-card temp-card">
+        <div class="card-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
+          </svg>
         </div>
+        <div class="card-content">
+          <span class="card-label">Nhiệt Độ Phòng</span>
+          <div class="value-row">
+            <span class="value-display" id="val-temp">--.-</span>
+            <span class="unit">°C</span>
+          </div>
+          <div class="stat-meta">
+            <span>Thấp: <b id="stat-temp-min">--</b>°C</span>
+            <span>Cao: <b id="stat-temp-max">--</b>°C</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Độ ẩm -->
+      <div class="glass-card sensor-card humi-card">
+        <div class="card-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+          </svg>
+        </div>
+        <div class="card-content">
+          <span class="card-label">Độ Ẩm Tương Đối</span>
+          <div class="value-row">
+            <span class="value-display" id="val-humi">--.-</span>
+            <span class="unit">% RH</span>
+          </div>
+          <div class="stat-meta">
+            <span>Thấp: <b id="stat-humi-min">--</b>%</span>
+            <span>Cao: <b id="stat-humi-max">--</b>%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Trạng Thái AI Climate -->
+      <div class="glass-card ai-card" id="ai-container">
+        <div class="ai-header">
+          <div class="ai-tag">
+            <span class="sparkle-icon">✦</span> TinyML On-Device
+          </div>
+          <span class="ai-live-indicator">LIVE INFERENCE</span>
+        </div>
+        <div class="ai-body">
+          <div class="ai-main-status">
+            <span class="comfort-title" id="comfort-text">Đang nhận diện...</span>
+            <span class="badge" id="comfort-badge">Khởi tạo</span>
+          </div>
+          <p class="ai-description" id="comfort-desc">Hệ thống AI tự động phân tích nhiệt độ, độ ẩm và Heat Index để chọn tốc độ quạt tối ưu.</p>
+        </div>
+      </div>
     </div>
-    <!-- Khối Điều Khiển Tốc Độ & Chế Độ Quạt -->
-    <section class="glass-panel">
-      <div class="section-header">
-        <span class="section-title">Chế Độ Quạt</span>
-        <div class="mode-switch">
-          <button type="button" class="mode-btn active" id="btn-manual" onclick="setMode('MANUAL')">Thủ Công</button>
-          <button type="button" class="mode-btn" id="btn-auto" onclick="setMode('AUTO')">Tự Động</button>
+
+    <!-- Real-time Chart Section -->
+    <section class="glass-card chart-section">
+      <div class="section-title-row">
+        <div class="title-with-icon">
+          <svg class="sec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 3v18h18"></path>
+            <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path>
+          </svg>
+          <div>
+            <h3>Biểu Đồ Vi Khí Hậu Thời Gian Thực</h3>
+            <p class="sec-sub">Theo dõi lịch sử biến thiên nhiệt độ và độ ẩm liên tục</p>
+          </div>
+        </div>
+        <div class="chart-legend-custom">
+          <span class="legend-item"><span class="legend-dot temp"></span> Nhiệt độ (°C)</span>
+          <span class="legend-item"><span class="legend-dot humi"></span> Độ ẩm (%)</span>
         </div>
       </div>
-
-      <!-- Panel Chế Độ Thủ Công -->
-      <div id="panel-manual">
-        <div class="ctrl-group">
-          <div class="ctrl-label">
-            <span>Tốc Độ Quạt Thủ Công</span>
-            <span class="ctrl-val-display" id="disp-fan-speed">0%</span>
-          </div>
-          <input type="range" id="slider-fan" min="0" max="100" value="0" oninput="onFanSlider(this.value)" onchange="sendControl()">
-        </div>
-      </div>
-
-      <!-- Panel Chế Độ Tự Động (2 Nấc Nhiệt Độ) -->
-      <div id="panel-auto" style="display: none;">
-        <div class="auto-rule-box">
-          <span class="rule-title">⚡ Nấc 1 (Mức Vừa)</span>
-          <div class="rule-grid">
-            <div>
-              <label>Kích hoạt từ (°C)</label>
-              <input type="number" id="cfg-t1" min="15" max="50" value="28" onchange="sendAutoConfig()">
-            </div>
-            <div>
-              <label>Tốc độ quạt (%)</label>
-              <input type="number" id="cfg-s1" min="1" max="100" value="50" onchange="sendAutoConfig()">
-            </div>
-          </div>
-        </div>
-
-        <div class="auto-rule-box" style="margin-top: 10px;">
-          <span class="rule-title">🔥 Nấc 2 (Mức Mạnh)</span>
-          <div class="rule-grid">
-            <div>
-              <label>Kích hoạt từ (°C)</label>
-              <input type="number" id="cfg-t2" min="15" max="50" value="32" onchange="sendAutoConfig()">
-            </div>
-            <div>
-              <label>Tốc độ quạt (%)</label>
-              <input type="number" id="cfg-s2" min="1" max="100" value="100" onchange="sendAutoConfig()">
-            </div>
-          </div>
-        </div>
-        <p class="rule-hint">* Nhiệt độ dưới Nấc 1 quạt sẽ tự động tắt (0%).</p>
+      <div class="chart-canvas-wrapper">
+        <canvas id="realtimeChart"></canvas>
       </div>
     </section>
 
-    <!-- Khối Điều Hướng Gió (Chạy độc lập cho cả Manual & Auto) -->
-    <section class="glass-panel">
-      <div class="section-header">
-        <span class="section-title">Điều Hướng Gió</span>
-      </div>
+    <!-- Controls Section: Fan & Swing -->
+    <div class="control-grid">
+      <!-- Khối Điều Khiển Tốc Độ & Chế Độ Quạt -->
+      <section class="glass-card control-card">
+        <div class="section-header">
+          <div class="title-with-icon">
+            <svg class="fan-anim-icon" id="fan-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M12 12c2-4 5-4 5-2s-3 4-5 2z"></path>
+              <path d="M12 12c-4-2-4-5-2-5s4 3 2 5z"></path>
+              <path d="M12 12c-2 4-5 4-5 2s3-4 5-2z"></path>
+              <path d="M12 12c4 2 4 5 2 5s-4-3-2-5z"></path>
+              <circle cx="12" cy="12" r="2"></circle>
+            </svg>
+            <div>
+              <h3>Tốc Độ & Chế Độ Quạt</h3>
+              <p class="sec-sub">Điều phối hoạt động động cơ PWM</p>
+            </div>
+          </div>
+          <!-- Mode Switch Segmented -->
+          <div class="segmented-control">
+            <button type="button" class="segment-btn active" id="btn-manual" onclick="setMode('MANUAL')">Thủ Công</button>
+            <button type="button" class="segment-btn" id="btn-auto" onclick="setMode('AUTO')">Tự Động</button>
+          </div>
+        </div>
 
-      <!-- Toggle Đảo Gió -->
-      <div class="ctrl-group">
-        <div class="switch-wrapper">
-          <span style="font-size: 0.85rem; font-weight: 500;">Đảo Gió Quét Tự Động</span>
-          <label class="toggle-switch">
+        <!-- Panel Thủ Công -->
+        <div id="panel-manual" class="mode-panel">
+          <div class="slider-header">
+            <span>Tốc Độ Quạt</span>
+            <span class="highlight-val" id="disp-fan-speed">0%</span>
+          </div>
+          <div class="slider-wrapper">
+            <input type="range" id="slider-fan" min="0" max="100" value="0" oninput="onFanSlider(this.value)" onchange="sendControl()">
+          </div>
+          <!-- Preset Buttons -->
+          <div class="preset-buttons">
+            <button type="button" class="preset-chip" onclick="setFanPreset(0)">Tắt (0%)</button>
+            <button type="button" class="preset-chip" onclick="setFanPreset(35)">Thoang thoảng (35%)</button>
+            <button type="button" class="preset-chip" onclick="setFanPreset(70)">Mát dịu (70%)</button>
+            <button type="button" class="preset-chip" onclick="setFanPreset(100)">Tối đa (100%)</button>
+          </div>
+        </div>
+
+        <!-- Panel Tự Động -->
+        <div id="panel-auto" class="mode-panel" style="display: none;">
+          <div class="auto-notice">
+            <span class="info-icon">ℹ</span>
+            <span>Ở chế độ Tự Động, AI hoặc quy tắc nấc nhiệt độ sẽ trực tiếp điều phối tốc độ quạt theo môi trường.</span>
+          </div>
+          <div class="rules-container">
+            <div class="rule-card">
+              <div class="rule-header">
+                <span class="rule-badge">Nấc 1 - Mức Vừa</span>
+              </div>
+              <div class="rule-inputs">
+                <div class="input-item">
+                  <label>Kích hoạt từ (°C)</label>
+                  <input type="number" id="cfg-t1" min="15" max="50" value="28" onchange="sendAutoConfig()">
+                </div>
+                <div class="input-item">
+                  <label>Tốc độ quạt (%)</label>
+                  <input type="number" id="cfg-s1" min="1" max="100" value="50" onchange="sendAutoConfig()">
+                </div>
+              </div>
+            </div>
+
+            <div class="rule-card">
+              <div class="rule-header">
+                <span class="rule-badge hot-badge">Nấc 2 - Mức Mạnh</span>
+              </div>
+              <div class="rule-inputs">
+                <div class="input-item">
+                  <label>Kích hoạt từ (°C)</label>
+                  <input type="number" id="cfg-t2" min="15" max="50" value="32" onchange="sendAutoConfig()">
+                </div>
+                <div class="input-item">
+                  <label>Tốc độ quạt (%)</label>
+                  <input type="number" id="cfg-s2" min="1" max="100" value="100" onchange="sendAutoConfig()">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Khối Điều Hướng Gió (Stepper / Swing) -->
+      <section class="glass-card control-card">
+        <div class="section-header">
+          <div class="title-with-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+            </svg>
+            <div>
+              <h3>Điều Hướng Gió</h3>
+              <p class="sec-sub">Quét tự động hoặc chỉnh góc cố định</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Toggle Đảo Gió -->
+        <div class="swing-toggle-box">
+          <div class="toggle-text">
+            <strong>Đảo Gió Quét Tự Động (Auto Swing)</strong>
+            <small>Quạt tự động xoay qua lại phân bổ luồng gió</small>
+          </div>
+          <label class="switch">
             <input type="checkbox" id="toggle-swing" onchange="onSwingToggle()">
-            <span class="slider-toggle"></span>
+            <span class="slider round"></span>
           </label>
         </div>
-      </div>
 
-      <!-- Nút Chỉnh Góc Cố Định -->
-      <div class="ctrl-group" id="angle-ctrl-box">
-        <div class="ctrl-label">
-          <span>Góc Quay Cố Định</span>
-          <span class="ctrl-val-display" id="disp-angle">0°</span>
+        <!-- Chỉnh Góc Cố Định -->
+        <div id="angle-ctrl-box" class="angle-control-section">
+          <div class="slider-header">
+            <span>Góc Quay Cố Định</span>
+            <span class="highlight-val" id="disp-angle">0°</span>
+          </div>
+
+          <div class="angle-stepper-row">
+            <button type="button" class="btn-step" onclick="stepAngle(-15)">⮜ -15°</button>
+            <button type="button" class="btn-step center-btn" onclick="setAngleExact(0)">0° (Chính diện)</button>
+            <button type="button" class="btn-step" onclick="stepAngle(15)">+15° ⮞</button>
+          </div>
+
+          <div class="angle-presets">
+            <button type="button" class="preset-chip small" onclick="setAngleExact(-45)">Trái (-45°)</button>
+            <button type="button" class="preset-chip small" onclick="setAngleExact(-30)">-30°</button>
+            <button type="button" class="preset-chip small" onclick="setAngleExact(30)">+30°</button>
+            <button type="button" class="preset-chip small" onclick="setAngleExact(45)">Phải (+45°)</button>
+          </div>
+
+          <button type="button" class="btn-calib" onclick="setZeroPoint()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20v-6M6 20V10M18 20V4"></path>
+            </svg>
+            Đặt vị trí hiện tại làm mốc 0°
+          </button>
         </div>
-        <div style="display: flex; gap: 10px; margin-top: 8px;">
-          <button type="button" class="btn" style="flex: 1;" onclick="stepAngle(-15)">⮜ Trái (-15°)</button>
-          <button type="button" class="btn" style="flex: 1;" onclick="stepAngle(15)">Phải (+15°) ⮞</button>
-        </div>
-        <button type="button" class="btn btn-secondary" onclick="setZeroPoint()">
-          ⚙ Đặt vị trí này làm mốc 0°
-        </button>
-      </div>
-    </section>
+      </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span>Samsung Innovation Campus (SIC) Project</span>
+      <span class="dot-separator">•</span>
+      <span>ESP32-S3 Edge AI Solution</span>
+    </footer>
   </div>
 
   <script src="/script.js"></script>
