@@ -11,6 +11,7 @@
 #include "task_toogle_boot.h"
 #include "stepper_control.h"
 #include "tinyml.h"
+#include "power_history_logger.h"
 
 void setup()
 {
@@ -26,6 +27,7 @@ void setup()
     fan_setup();
     stepper_init();
     load_auto_config();
+    logger_init();
 
     WiFi_Init();
     Webserver_reconnect();

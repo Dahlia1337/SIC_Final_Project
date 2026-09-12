@@ -1,5 +1,6 @@
 #include "task_webserver.h"
 #include "global.h"
+#include "power_history_logger.h"
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
@@ -66,6 +67,16 @@ void connnectWSV()
               { request->send(LittleFS, "/styles.css", "text/css"); });
     server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request) {
                 request->send(204);});
+
+    // API Lịch sử nhiệt độ, độ ẩm (1h, 24h, 7d, 30d)
+    server.on("/api/history", HTTP_GET, [](AsyncWebServerRequest *request) {
+        String range = "1h";
+        if (request->hasParam("range")) {
+            range = request->getParam("range")->value();
+        }
+        String json = logger_get_history_json(range);
+        request->send(200, "application/json", json);
+    });
 
     server.begin();
     ElegantOTA.begin(&server);

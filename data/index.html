@@ -24,7 +24,7 @@
         </div>
         <div>
           <h1>Smart Fan AI</h1>
-          <p class="subtitle">Hệ Thống Quạt Thông Minh Edge AI</p>
+          <p class="subtitle">Hệ Thống Quạt Thông Minh Edge AI & Quản Lý Năng Lượng</p>
         </div>
       </div>
       <div class="status-badge" id="ws-badge">
@@ -43,7 +43,7 @@
           </svg>
         </div>
         <div class="card-content">
-          <span class="card-label">Nhiệt Độ Phòng</span>
+          <span class="card-label">Nhiệt Độ Phòng (0 - 50°C)</span>
           <div class="value-row">
             <span class="value-display" id="val-temp">--.-</span>
             <span class="unit">°C</span>
@@ -63,7 +63,7 @@
           </svg>
         </div>
         <div class="card-content">
-          <span class="card-label">Độ Ẩm Tương Đối</span>
+          <span class="card-label">Độ Ẩm Tương Đối (0 - 100%)</span>
           <div class="value-row">
             <span class="value-display" id="val-humi">--.-</span>
             <span class="unit">% RH</span>
@@ -93,7 +93,95 @@
       </div>
     </div>
 
-    <!-- Real-time Chart Section -->
+    <!-- Power & Energy Monitoring Card -->
+    <section class="glass-card power-section">
+      <div class="section-title-row">
+        <div class="title-with-icon">
+          <svg class="power-icon-glow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <div>
+            <h3>Giám Sát Điện Năng Tiêu Thụ Từng Tác Vụ</h3>
+            <p class="sec-sub">Đo lường công suất tức thời và mức tiết kiệm điện thời gian thực</p>
+          </div>
+        </div>
+        <div class="eco-badge" id="eco-badge">
+          <span>🌿 Tiết kiệm AI: <b id="val-saved-pct">0%</b></span>
+        </div>
+      </div>
+
+      <!-- Power Highlights -->
+      <div class="power-stats-grid">
+        <div class="power-stat-item total">
+          <span class="p-label">Tổng Công Suất Tức Thời</span>
+          <div class="p-val-row">
+            <span class="p-val" id="val-p-total">0.00</span>
+            <span class="p-unit">W</span>
+          </div>
+          <small>Nguồn cấp 5V DC</small>
+        </div>
+        <div class="power-stat-item energy">
+          <span class="p-label">Điện Năng Tiêu Thụ Tích Lũy</span>
+          <div class="p-val-row">
+            <span class="p-val" id="val-energy-wh">0.00</span>
+            <span class="p-unit">Wh</span>
+          </div>
+          <small id="val-energy-kwh">≈ 0.000 kWh</small>
+        </div>
+        <div class="power-stat-item cost">
+          <span class="p-label">Chi Phí Điện Tạm Tính</span>
+          <div class="p-val-row">
+            <span class="p-val" id="val-cost">0</span>
+            <span class="p-unit">đ</span>
+          </div>
+          <small>Đơn giá 2.000đ/kWh</small>
+        </div>
+      </div>
+
+      <!-- Detailed Breakdown per Task -->
+      <div class="power-breakdown-box">
+        <div class="breakdown-header">
+          <span>Phân Bổ Công Suất Từng Tác Vụ</span>
+          <span id="p-status-note">Đang hoạt động</span>
+        </div>
+        <!-- Segmented Bar -->
+        <div class="segmented-progress-bar">
+          <div class="seg-bar bar-fan" id="bar-fan" style="width: 25%;"></div>
+          <div class="seg-bar bar-stepper" id="bar-stepper" style="width: 20%;"></div>
+          <div class="seg-bar bar-esp" id="bar-esp" style="width: 35%;"></div>
+          <div class="seg-bar bar-peri" id="bar-peri" style="width: 20%;"></div>
+        </div>
+        <!-- Breakdown Legend Items -->
+        <div class="breakdown-list">
+          <div class="breakdown-item">
+            <span class="color-bullet fan"></span>
+            <span class="task-name">Động cơ Quạt (PWM)</span>
+            <span class="task-val" id="p-fan-val">0.00 W</span>
+            <span class="task-pct" id="p-fan-pct">(0%)</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="color-bullet stepper"></span>
+            <span class="task-name">Động cơ Đảo Gió (Stepper)</span>
+            <span class="task-val" id="p-stepper-val">0.00 W</span>
+            <span class="task-pct" id="p-stepper-pct">(0%)</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="color-bullet esp"></span>
+            <span class="task-name">ESP32-S3 (CPU + WiFi + TinyML)</span>
+            <span class="task-val" id="p-esp-val">0.50 W</span>
+            <span class="task-pct" id="p-esp-pct">(0%)</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="color-bullet peri"></span>
+            <span class="task-name">Ngoại Vi (LCD 1602 + RGB + DHT22)</span>
+            <span class="task-val" id="p-peri-val">0.20 W</span>
+            <span class="task-pct" id="p-peri-pct">(0%)</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Real-time Chart Section with Timeframe Filter -->
     <section class="glass-card chart-section">
       <div class="section-title-row">
         <div class="title-with-icon">
@@ -102,17 +190,30 @@
             <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path>
           </svg>
           <div>
-            <h3>Biểu Đồ Vi Khí Hậu Thời Gian Thực</h3>
-            <p class="sec-sub">Theo dõi lịch sử biến thiên nhiệt độ và độ ẩm liên tục</p>
+            <h3>Biểu Đồ Lịch Sử Vi Khí Hậu</h3>
+            <p class="sec-sub">Thang đo cố định: Nhiệt độ 0 - 50°C | Độ ẩm 0 - 100%</p>
           </div>
         </div>
-        <div class="chart-legend-custom">
-          <span class="legend-item"><span class="legend-dot temp"></span> Nhiệt độ (°C)</span>
-          <span class="legend-item"><span class="legend-dot humi"></span> Độ ẩm (%)</span>
+        <!-- Timeframe Selectors -->
+        <div class="timeframe-buttons">
+          <button type="button" class="tf-btn active" id="tf-live" onclick="setTimeframe('live')">Trực Tiếp</button>
+          <button type="button" class="tf-btn" id="tf-1h" onclick="setTimeframe('1h')">1 Giờ</button>
+          <button type="button" class="tf-btn" id="tf-24h" onclick="setTimeframe('24h')">24 Giờ</button>
+          <button type="button" class="tf-btn" id="tf-7d" onclick="setTimeframe('7d')">1 Tuần</button>
+          <button type="button" class="tf-btn" id="tf-30d" onclick="setTimeframe('30d')">1 Tháng</button>
         </div>
       </div>
+
       <div class="chart-canvas-wrapper">
         <canvas id="realtimeChart"></canvas>
+      </div>
+
+      <div class="chart-footer-row">
+        <div class="chart-legend-custom">
+          <span class="legend-item"><span class="legend-dot temp"></span> Nhiệt độ (0 - 50°C)</span>
+          <span class="legend-item"><span class="legend-dot humi"></span> Độ ẩm (0 - 100%)</span>
+        </div>
+        <div class="chart-data-note" id="chart-data-note">Đang xem dữ liệu trực tiếp từ cảm biến</div>
       </div>
     </section>
 
