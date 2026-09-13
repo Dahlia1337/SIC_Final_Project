@@ -54,6 +54,10 @@ bool startSTA()
         } else {
             Serial.println("❌ Lỗi khởi động mDNS!");
         }
+
+        // Đồng bộ thời gian thực qua NTP (Múi giờ GMT+7 Việt Nam)
+        configTime(7 * 3600, 0, "pool.ntp.org", "time.google.com");
+        Serial.println("⏰ Đang đồng bộ thời gian NTP...");
         
         return true;
     }

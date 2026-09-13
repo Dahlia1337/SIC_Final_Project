@@ -37,32 +37,47 @@ void task_lcd(void *pvParameters)
     vTaskDelay(1500 / portTICK_PERIOD_MS);
     lcd.clear();
 
+    sta_connected_millis = millis();
+
     char line1[17];
     char line2[17];
 
-    sta_connected_millis = millis();
+    int last_mode = -1;
+
     while (true)
     {
+        int current_mode = 0;
         if (isAPMode)
         {
+            current_mode = 1;
             snprintf(line1, sizeof(line1), "MODE: AP CONFIG ");
             snprintf(line2, sizeof(line2), "IP:%-13s", WiFi.softAPIP().toString().c_str());
         }
         else if (millis() - sta_connected_millis < 20000)
         {
+            current_mode = 2;
             snprintf(line1, sizeof(line1), "WiFi Connected! ");
             snprintf(line2, sizeof(line2), "IP:%-13s", WiFi.localIP().toString().c_str());
         }
         else
         {
-            const char* comfort_labels[] = {"COLD", "COMF", "HUMID", "HOT "};
+            current_mode = 3;
+            const char* comfort_labels[] = {"COLD", "COMF", "WARM", "HOT "};
+
+            int comfort_idx = (comfort_class >= 0 && comfort_class < 4) ? comfort_class : 1;
+            char mode_char = system_state ? 'A' : 'M';
 
             // Dòng 1: Nhiệt độ + Độ ẩm
-            snprintf(line1, sizeof(line1), "T:%4.1fC H:%3.0f%%", glob_temperature, glob_humidity);
+            snprintf(line1, sizeof(line1), "T:%2.0f\337C H:%2.0f%% [%c]", glob_temperature, glob_humidity, mode_char);
 
             // Dòng 2: Chế độ, tốc độ quạt và Nhãn AI
-            char mode_char = system_state ? 'A' : 'M';
-            snprintf(line2, sizeof(line2), "[%c] F:%3d%% AI:%s", mode_char, fan_speed, comfort_labels[comfort_class]);
+            snprintf(line2, sizeof(line2), "F:%-3d%%   AI:%-4s", fan_speed, comfort_labels[comfort_idx]);
+        }
+
+        if (current_mode != last_mode)
+        {
+            lcd.clear();
+            last_mode = current_mode;
         }
 
         lcd.setCursor(0, 0);
@@ -71,7 +86,7 @@ void task_lcd(void *pvParameters)
         lcd.setCursor(0, 1);
         lcd.print(line2);
 
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
 

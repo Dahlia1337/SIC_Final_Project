@@ -56,13 +56,13 @@ void tiny_ml_task(void *pvParameters) {
             }
             comfort_class = best_class;
             rgb_display_comfort(comfort_class);
-            Serial.printf("AI Result -> Comfort Class: %d (Prob: %.2f) | [0-COLD]: %.2f | [1-COMFORT]: %.2f | [2-WARM]: %.2f | [3-HOT]: %.2f\n",
-                          comfort_class,
-                          max_prob,
-                          output->data.f[0],
-                          output->data.f[1],
-                          output->data.f[2],
-                          output->data.f[3]);
+            // Serial.printf("AI Result -> Comfort Class: %d (Prob: %.2f) | [0-COLD]: %.2f | [1-COMFORT]: %.2f | [2-WARM]: %.2f | [3-HOT]: %.2f\n",
+            //               comfort_class,
+            //               max_prob,
+            //               output->data.f[0],
+            //               output->data.f[1],
+            //               output->data.f[2],
+            //               output->data.f[3]);
         }
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
