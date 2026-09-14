@@ -16,3 +16,9 @@ boolean isWifiConnected = false;
 
 String mdnsHost = "smartfan";
 int comfort_class = 1;
+
+// TinyML Output Probabilities (4 classes)
+float comfort_probs[4] = {0.0f, 1.0f, 0.0f, 0.0f}; // Khởi đầu: COMFORT
+unsigned long ai_inference_count = 0;
+float ai_delta_t = 0.0f;
+float ai_delta_h = 0.0f;

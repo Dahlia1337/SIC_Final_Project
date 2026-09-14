@@ -47,6 +47,11 @@ extern float auto_thresh_t1, auto_thresh_t2;
 extern int auto_speed_s1, auto_speed_s2;
 
 extern int comfort_class; // 0: COLD, 1: COMFORT, 2: WARM_HUMID, 3: HOT
-extern int comfort_class;
+
+// TinyML Output Probabilities (4 classes)
+extern float comfort_probs[4]; // [0]=COLD, [1]=COMFORT, [2]=WARM_HUMID, [3]=HOT
+extern unsigned long ai_inference_count; // Tổng số lần inference
+extern float ai_delta_t;  // Tốc độ thay đổi nhiệt độ (°C/2s)
+extern float ai_delta_h;  // Tốc độ thay đổi độ ẩm (%/2s)
 
 #endif

@@ -1,5 +1,6 @@
 #include "power_history_logger.h"
 #include <time.h>
+#include <math.h>
 
 #define SIZE_1H   60   // 60 điểm (mỗi 1 phút)
 #define SIZE_24H  96   // 96 điểm (mỗi 15 phút)
@@ -22,8 +23,7 @@ static HistoryPoint buf_30d[SIZE_30D];
 static int count_30d = 0;
 static int head_30d = 0;
 
-static PowerMetrics current_power = {0};
-static unsigned long last_update_ms = 0;
+static ComfortHealthMetrics current_health = {0};
 static unsigned long last_1h_sample_ms = 0;
 static unsigned long last_24h_sample_ms = 0;
 static unsigned long last_7d_sample_ms = 0;
@@ -49,9 +49,40 @@ static uint32_t get_current_ts() {
     return (uint32_t)(millis() / 1000);
 }
 
+// Công thức tính Heat Index (NOAA Rothfusz regression)
+static float compute_heat_index(float t_c, float rh) {
+    if (t_c < 20.0f) return t_c;
+    float t_f = t_c * 1.8f + 32.0f;
+    float hi_f = 0.5f * (t_f + 61.0f + ((t_f - 68.0f) * 1.2f) + (rh * 0.094f));
+    if (hi_f >= 80.0f) {
+        hi_f = -42.379f + 2.04901523f * t_f + 10.14333127f * rh
+               - 0.22475541f * t_f * rh - 0.00683783f * t_f * t_f
+               - 0.05481717f * rh * rh + 0.00122874f * t_f * t_f * rh
+               + 0.00085282f * t_f * rh * rh - 0.00000199f * t_f * t_f * rh * rh;
+        if (rh < 13.0f && t_f >= 80.0f && t_f <= 112.0f) {
+            hi_f -= ((13.0f - rh) / 4.0f) * sqrtf((17.0f - fabsf(t_f - 95.0f)) / 17.0f);
+        } else if (rh > 85.0f && t_f >= 80.0f && t_f <= 87.0f) {
+            hi_f += ((rh - 85.0f) / 10.0f) * ((87.0f - t_f) / 5.0f);
+        }
+    }
+    return (hi_f - 32.0f) / 1.8f;
+}
+
+// Công thức tính Nhiệt độ điểm sương (Magnus-Tetens)
+static float compute_dew_point(float t_c, float rh) {
+    if (rh <= 0.0f) rh = 0.01f;
+    if (rh > 100.0f) rh = 100.0f;
+    const float a = 17.27f;
+    const float b = 237.7f;
+    float alpha = ((a * t_c) / (b + t_c)) + logf(rh / 100.0f);
+    return (b * alpha) / (a - alpha);
+}
+
 void logger_init() {
-    current_power.energy_wh = 0.0f;
-    last_update_ms = millis();
+    memset(&current_health, 0, sizeof(current_health));
+    current_health.comfort_score = 100.0f;
+    current_health.pct_comfort = 100.0f;
+
     last_1h_sample_ms = millis();
     last_24h_sample_ms = millis();
     last_7d_sample_ms = millis();
@@ -71,7 +102,11 @@ void logger_init() {
             DeserializationError err = deserializeJson(doc, file);
             file.close();
             if (!err) {
-                current_power.energy_wh = doc["energy_wh"] | 0.0f;
+                current_health.count_total = doc["cnt_tot"] | 0;
+                current_health.count_cold = doc["cnt_cld"] | 0;
+                current_health.count_comfort = doc["cnt_cmf"] | 0;
+                current_health.count_warm = doc["cnt_wrm"] | 0;
+                current_health.count_hot = doc["cnt_hot"] | 0;
 
                 // Load 1h
                 JsonArray arr1h = doc["h1"];
@@ -105,82 +140,100 @@ void logger_init() {
                     }
                 }
 
-                Serial.printf("✅ Đã khôi phục lịch sử từ LittleFS: 1h(%d), 24h(%d), 7d(%d), 30d(%d)\n",
-                              count_1h, count_24h, count_7d, count_30d);
+                Serial.printf("✅ Đã khôi phục lịch sử từ LittleFS: 1h(%d), 24h(%d), 7d(%d), 30d(%d), tổng mẫu(%lu)\n",
+                              count_1h, count_24h, count_7d, count_30d, (unsigned long)current_health.count_total);
             }
         }
     }
 }
 
-void logger_update(float temp, float humi, int fan_pwm, bool is_swing) {
+void logger_update(float temp, float humi, int comfort_class) {
     unsigned long now_ms = millis();
-    float delta_s = (now_ms - last_update_ms) / 1000.0f;
-    if (delta_s <= 0 || delta_s > 60.0f) delta_s = 2.0f;
-    last_update_ms = now_ms;
 
-    // 1. Tính toán công suất từng thành phần
-    float fan_ratio = (float)fan_pwm / 100.0f;
-    if (fan_ratio > 1.0f) fan_ratio = 1.0f;
-    if (fan_ratio < 0.0f) fan_ratio = 0.0f;
+    // 1. Tính toán Heat Index & Phân cấp rủi ro sức khỏe NOAA NWS
+    current_health.heat_index = compute_heat_index(temp, humi);
+    if (current_health.heat_index < 27.0f) {
+        current_health.hi_risk_level = 0; // An toàn (< 80°F / < 27°C)
+    } else if (current_health.heat_index < 32.0f) {
+        current_health.hi_risk_level = 1; // Caution (80–90°F / 27–32°C)
+    } else if (current_health.heat_index < 41.0f) {
+        current_health.hi_risk_level = 2; // Extreme caution (90–105°F / 32–41°C)
+    } else if (current_health.heat_index < 54.0f) {
+        current_health.hi_risk_level = 3; // Danger (105–129°F / 41–54°C)
+    } else {
+        current_health.hi_risk_level = 4; // Extreme danger (>= 130°F / >= 54°C)
+    }
 
-    // Công suất quạt (tối đa ~1.5W ở 100%)
-    current_power.p_fan = 1.50f * powf(fan_ratio, 1.25f);
+    // 2. Tính toán Nhiệt độ điểm sương & Đánh giá nguy cơ nồm ẩm
+    current_health.dew_point = compute_dew_point(temp, humi);
+    float diff = temp - current_health.dew_point;
+    if (diff <= 2.0f || humi >= 80.0f) {
+        current_health.mold_risk_level = 2; // Cao (Nguy cơ nồm ẩm & ngưng tụ)
+    } else if (diff <= 4.0f || humi >= 70.0f) {
+        current_health.mold_risk_level = 1; // Cảnh giác (Trung bình)
+    } else {
+        current_health.mold_risk_level = 0; // Thấp / Khô thoáng
+    }
 
-    // Công suất động cơ bước đảo gió (khoảng ~0.9W khi đang quét)
-    current_power.p_stepper = is_swing ? 0.90f : 0.0f;
+    // 3. Tích lũy phân loại của TinyML & Tính Điểm Tiện Nghi (Comfort Score)
+    if (comfort_class >= 0 && comfort_class <= 3) {
+        current_health.count_total++;
+        if (comfort_class == 0) current_health.count_cold++;
+        else if (comfort_class == 1) current_health.count_comfort++;
+        else if (comfort_class == 2) current_health.count_warm++;
+        else if (comfort_class == 3) current_health.count_hot++;
+    }
 
-    // Công suất ESP32-S3 + WiFi + TinyML (trung bình ~0.50W)
-    current_power.p_esp = 0.50f;
-
-    // Công suất thiết bị ngoại vi: LCD 1602 (0.12W) + NeoPixel (0.08W) + DHT22 (0.01W) ~ 0.20W
-    current_power.p_peripherals = 0.20f;
-
-    // Tổng công suất tức thời
-    current_power.p_total = current_power.p_fan + current_power.p_stepper + current_power.p_esp + current_power.p_peripherals;
-
-    // Tích phân điện năng tiêu thụ (Wh)
-    current_power.energy_wh += current_power.p_total * (delta_s / 3600.0f);
-
-    // Tính % điện năng tiết kiệm được nhờ AI (so với chạy 100% quạt + đảo gió liên tục ~3.1W)
-    float p_benchmark = 1.50f + 0.90f + 0.50f + 0.20f; // 3.10W
-    float saved = ((p_benchmark - current_power.p_total) / p_benchmark) * 100.0f;
-    current_power.saved_pct = (saved > 0.0f) ? saved : 0.0f;
+    if (current_health.count_total > 0) {
+        float score_sum = (current_health.count_comfort * 1.0f) +
+                          (current_health.count_cold * 0.6f) +
+                          (current_health.count_warm * 0.4f) +
+                          (current_health.count_hot * 0.1f);
+        current_health.comfort_score = (score_sum / (float)current_health.count_total) * 100.0f;
+        current_health.pct_cold = ((float)current_health.count_cold * 100.0f) / current_health.count_total;
+        current_health.pct_comfort = ((float)current_health.count_comfort * 100.0f) / current_health.count_total;
+        current_health.pct_warm = ((float)current_health.count_warm * 100.0f) / current_health.count_total;
+        current_health.pct_hot = ((float)current_health.count_hot * 100.0f) / current_health.count_total;
+    } else {
+        current_health.comfort_score = 100.0f;
+        current_health.pct_comfort = 100.0f;
+    }
 
     uint32_t ts = get_current_ts();
 
-    // 2. Ghi mẫu 1 Giờ (Mỗi 60 giây = 1 phút)
+    // 4. Ghi mẫu 1 Giờ (Mỗi 60 giây = 1 phút)
     if (now_ms - last_1h_sample_ms >= 60000UL || count_1h == 0) {
         last_1h_sample_ms = now_ms;
         push_point(buf_1h, SIZE_1H, head_1h, count_1h, temp, humi, ts);
     }
 
-    // 3. Ghi mẫu 24 Giờ (Mỗi 15 phút = 900.000 ms)
+    // 5. Ghi mẫu 24 Giờ (Mỗi 15 phút = 900.000 ms)
     if (now_ms - last_24h_sample_ms >= 900000UL || count_24h == 0) {
         last_24h_sample_ms = now_ms;
         push_point(buf_24h, SIZE_24H, head_24h, count_24h, temp, humi, ts);
     }
 
-    // 4. Ghi mẫu 7 Ngày (Mỗi 2 giờ = 7.200.000 ms)
+    // 6. Ghi mẫu 7 Ngày (Mỗi 2 giờ = 7.200.000 ms)
     if (now_ms - last_7d_sample_ms >= 7200000UL || count_7d == 0) {
         last_7d_sample_ms = now_ms;
         push_point(buf_7d, SIZE_7D, head_7d, count_7d, temp, humi, ts);
     }
 
-    // 5. Ghi mẫu 30 Ngày (Mỗi 6 giờ = 21.600.000 ms)
+    // 7. Ghi mẫu 30 Ngày (Mỗi 6 giờ = 21.600.000 ms)
     if (now_ms - last_30d_sample_ms >= 21600000UL || count_30d == 0) {
         last_30d_sample_ms = now_ms;
         push_point(buf_30d, SIZE_30D, head_30d, count_30d, temp, humi, ts);
     }
 
-    // 6. Định kỳ lưu LittleFS mỗi 10 phút để tránh chai Flash
+    // 8. Định kỳ lưu LittleFS mỗi 10 phút để tránh chai Flash
     if (now_ms - last_fs_save_ms >= 600000UL) {
         last_fs_save_ms = now_ms;
         logger_save_fs();
     }
 }
 
-PowerMetrics logger_get_power() {
-    return current_power;
+ComfortHealthMetrics logger_get_health() {
+    return current_health;
 }
 
 static void serialize_buffer(JsonArray& arr, HistoryPoint* buf, int max_size, int head, int count) {
@@ -223,7 +276,11 @@ void logger_save_fs() {
     if (!file) return;
 
     JsonDocument doc;
-    doc["energy_wh"] = serialized(String(current_power.energy_wh, 2));
+    doc["cnt_tot"] = current_health.count_total;
+    doc["cnt_cld"] = current_health.count_cold;
+    doc["cnt_cmf"] = current_health.count_comfort;
+    doc["cnt_wrm"] = current_health.count_warm;
+    doc["cnt_hot"] = current_health.count_hot;
 
     JsonArray arr1h = doc["h1"].to<JsonArray>();
     serialize_buffer(arr1h, buf_1h, SIZE_1H, head_1h, count_1h);
@@ -239,5 +296,5 @@ void logger_save_fs() {
 
     serializeJson(doc, file);
     file.close();
-    Serial.println("💾 Đã lưu lịch sử vi khí hậu và điện năng xuống LittleFS.");
+    Serial.println("💾 Đã lưu thống kê tiện nghi sức khỏe và lịch sử vi khí hậu xuống LittleFS.");
 }

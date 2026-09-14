@@ -3,6 +3,9 @@ import sys
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.utils.class_weight import compute_class_weight
 
 if sys.stdout.encoding != 'utf-8':
@@ -24,8 +27,8 @@ if not os.path.exists(csv_path):
 print(f"--> [1/6] Đang đọc dữ liệu từ {csv_path}...")
 df_raw = pd.read_csv(csv_path, low_memory=False)
 
-# Lấy các cột cốt lõi
-cols = ['Air temperature (C)', 'Relative humidity (%)']
+# Lấy các cột cốt lõi: Nhiệt độ, Độ ẩm và Lá phiếu cảm nhận nhiệt thực tế của con người (Thermal sensation)
+cols = ['Air temperature (C)', 'Relative humidity (%)', 'Thermal sensation']
 df = df_raw[cols].dropna().copy()
 
 # Lọc các giá trị vật lý hợp lệ
@@ -33,37 +36,32 @@ df = df[(df['Air temperature (C)'] >= 10.0) & (df['Air temperature (C)'] <= 45.0
 df = df[(df['Relative humidity (%)'] >= 15.0) & (df['Relative humidity (%)'] <= 100.0)]
 
 # ==========================================
-# 2. TÍNH TOÁN CHỈ SỐ NHIỆT & GÁN NHÃN THEO README
+# 2. KHẢO SÁT & TÍNH TOÁN ĐỒNG THUẬN CẢM NHẬN NHIỆT CON NGƯỜI (OCCUPANT CONSENSUS TSV)
 # ==========================================
-print("--> [2/6] Tính toán Heat Index và phân loại 4 lớp tiện nghi nhiệt...")
+print("--> [2/6] Phân tích lá phiếu cảm nhận nhiệt thực tế (Thermal Sensation Vote - ASHRAE 55)...")
 
-def compute_heat_index(t, h):
-    tf_val = t * 1.8 + 32.0
-    if tf_val >= 80.0:
-        hi_f = (-42.379 + 2.04901523 * tf_val + 10.14333127 * h
-                - 0.22475541 * tf_val * h - 0.00683783 * (tf_val ** 2)
-                - 0.05481717 * (h ** 2) + 0.00122874 * (tf_val ** 2) * h
-                + 0.00085282 * tf_val * (h ** 2) - 0.00000199 * (tf_val ** 2) * (h ** 2))
-        return (hi_f - 32.0) / 1.8
-    return t
+# Làm mịn nhiễu cá nhân (quần áo/thể trạng) bằng cách tính Mean TSV cho mỗi vùng vi khí hậu (0.5°C x 2% RH)
+df['t_grid'] = (df['Air temperature (C)'] * 2).round() / 2
+df['h_grid'] = (df['Relative humidity (%)'] / 2).round() * 2
 
-def map_comfort_class(t, h):
-    hi_c = compute_heat_index(t, h)
-    
-    # Class 0: COLD (T < 22°C)
-    if t < 22.0:
+grid_tsv = df.groupby(['t_grid', 'h_grid'])['Thermal sensation'].transform('mean')
+df['consensus_tsv'] = grid_tsv
+
+def map_tsv_to_class(tsv):
+    # Class 0: COLD (TSV < -0.5: Con người cảm thấy lạnh)
+    if tsv < -0.5:
         return 0
-    # Class 3: HOT (T >= 32°C hoặc HI >= 33°C)
-    elif t >= 32.0 or hi_c >= 33.0:
-        return 3
-    # Class 2: WARM_HUMID (H >= 75% & T >= 26.5°C, hoặc 27.5°C <= T < 32°C, hoặc HI >= 28.5°C)
-    elif (h >= 75.0 and t >= 26.5) or (t >= 27.5 and t < 32.0) or (hi_c >= 28.5):
-        return 2
-    # Class 1: COMFORT (22°C <= T < 27.5°C)
-    else:
+    # Class 1: COMFORT (Chuẩn ASHRAE 55: -0.5 <= TSV < +0.5 là Vùng tiện nghi trung tính Neutral Zone)
+    elif tsv < 0.5:
         return 1
+    # Class 2: WARM_HUMID (+0.5 <= TSV < +1.4: Hơi ấm / nóng ẩm, người bắt đầu thấy bí bức)
+    elif tsv < 1.4:
+        return 2
+    # Class 3: HOT (TSV >= +1.4: Nóng gắt, rất oi bức)
+    else:
+        return 3
 
-df['comfort_class'] = [map_comfort_class(t, h) for t, h in zip(df['Air temperature (C)'], df['Relative humidity (%)'])]
+df['comfort_class'] = df['consensus_tsv'].apply(map_tsv_to_class)
 label_map = {0: 'COLD', 1: 'COMFORT', 2: 'WARM_HUMID', 3: 'HOT'}
 df['comfort_label'] = df['comfort_class'].map(label_map)
 
@@ -120,9 +118,14 @@ print("\n--> [4/6] Bắt đầu huấn luyện mô hình Keras...")
 X = df_clean[features].values.astype(np.float32)
 y = df_clean['comfort_class'].values.astype(np.int32)
 
-# Nhúng layer Normalization trực tiếp vào Model
+# Phân chia train/val (stratified theo y) để tránh data leakage
+X_train, X_val, y_train, y_val = train_test_split(
+    X, y, test_size=0.15, random_state=42, stratify=y
+)
+
+# Nhúng layer Normalization trực tiếp vào Model (chỉ adapt trên X_train để tránh data leakage)
 norm_layer = tf.keras.layers.Normalization(axis=-1)
-norm_layer.adapt(X)
+norm_layer.adapt(X_train)
 
 model = tf.keras.Sequential([
     tf.keras.layers.Input(shape=(4,)),
@@ -136,15 +139,97 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.003),
               loss='sparse_categorical_crossentropy',
               metrics=['accuracy'])
 
-class_weights = compute_class_weight('balanced', classes=np.unique(y), y=y)
+class_weights = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
 weight_dict = dict(enumerate(class_weights))
 
-model.fit(X, y, epochs=25, batch_size=64, validation_split=0.15, class_weight=weight_dict, verbose=1)
+history = model.fit(
+    X_train, y_train,
+    epochs=25,
+    batch_size=64,
+    validation_data=(X_val, y_val),
+    class_weight=weight_dict,
+    verbose=1
+)
 
 # ==========================================
-# 5. ĐÁNH GIÁ MÔ HÌNH VỚI CÁC TRƯỜNG HỢP KIỂM THỬ
+# 5a. ĐÁNH GIÁ ĐỊNH LƯỢNG MÔ HÌNH TRÊN TẬP VALIDATION
 # ==========================================
-print("\n--> [5/6] Kiểm thử nhanh các ngưỡng điều kiện thực tế...")
+print("\n--> [5a/6] Đánh giá định lượng trên tập validation (Classification Report & Confusion Matrix)...")
+
+# Dự đoán trên tập validation
+val_probs = model.predict(X_val, verbose=0)
+y_val_pred = np.argmax(val_probs, axis=1)
+
+# In và lưu Classification Report
+target_names = [label_map[i] for i in range(4)]
+report_str = classification_report(y_val, y_val_pred, target_names=target_names, digits=3)
+print("\nBáo cáo phân loại (Classification Report):")
+print(report_str)
+
+report_path = os.path.join(out_dir, "classification_report.txt")
+with open(report_path, "w", encoding="utf-8") as f:
+    f.write(report_str)
+print(f"    - Đã lưu báo cáo phân loại: {report_path}")
+
+# In và vẽ Confusion Matrix
+cm = confusion_matrix(y_val, y_val_pred)
+print("\nMa trận nhầm lẫn (Confusion Matrix):")
+print(cm)
+
+plt.figure(figsize=(6, 5))
+plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+plt.title("Confusion Matrix - Comfort Classification")
+plt.colorbar()
+tick_marks = np.arange(len(target_names))
+plt.xticks(tick_marks, target_names)
+plt.yticks(tick_marks, target_names)
+plt.xlabel("Dự đoán (Predicted)")
+plt.ylabel("Thực tế (True)")
+
+thresh = cm.max() / 2.0
+for i in range(cm.shape[0]):
+    for j in range(cm.shape[1]):
+        plt.text(j, i, format(cm[i, j], 'd'),
+                 horizontalalignment="center",
+                 verticalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+plt.tight_layout()
+cm_path = os.path.join(out_dir, "confusion_matrix.png")
+plt.savefig(cm_path, dpi=150)
+plt.close()
+print(f"    - Đã lưu ảnh confusion matrix: {cm_path}")
+
+# Vẽ thêm biểu đồ quá trình huấn luyện (Loss & Accuracy)
+plt.figure(figsize=(10, 4))
+plt.subplot(1, 2, 1)
+plt.plot(history.history['loss'], label='Train Loss', color='tab:blue')
+plt.plot(history.history['val_loss'], label='Val Loss', color='tab:orange')
+plt.title('Loss per Epoch')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.6)
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['accuracy'], label='Train Acc', color='tab:blue')
+plt.plot(history.history['val_accuracy'], label='Val Acc', color='tab:orange')
+plt.title('Accuracy per Epoch')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.6)
+
+plt.tight_layout()
+history_plot_path = os.path.join(out_dir, "training_history.png")
+plt.savefig(history_plot_path, dpi=150)
+plt.close()
+print(f"    - Đã lưu biểu đồ huấn luyện: {history_plot_path}")
+
+# ==========================================
+# 5b. ĐÁNH GIÁ MÔ HÌNH VỚI CÁC TRƯỜNG HỢP KIỂM THỬ
+# ==========================================
+print("\n--> [5b/6] Kiểm thử nhanh các ngưỡng điều kiện thực tế...")
 test_cases = [
     (19.0, 50.0, "Class 0 - COLD (Tắt quạt)"),
     (24.0, 50.0, "Class 1 - COMFORT (Quạt 35%)"),

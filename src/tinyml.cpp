@@ -45,24 +45,25 @@ void tiny_ml_task(void *pvParameters) {
         input->data.f[3] = delta_h;
         
         if (interpreter->Invoke() == kTfLiteOk) {
+            // Lưu xác suất 4 lớp vào biến toàn cục
+            for (int i = 0; i < 4; i++) {
+                comfort_probs[i] = output->data.f[i];
+            }
+
             // Tìm class có xác suất cao nhất
             int best_class = 0;
-            float max_prob = output->data.f[0];
+            float max_prob = comfort_probs[0];
             for (int i = 1; i < 4; i++) {
-                if (output->data.f[i] > max_prob) {
-                    max_prob = output->data.f[i];
+                if (comfort_probs[i] > max_prob) {
+                    max_prob = comfort_probs[i];
                     best_class = i;
                 }
             }
             comfort_class = best_class;
+            ai_inference_count++;
+            ai_delta_t = delta_t;
+            ai_delta_h = delta_h;
             rgb_display_comfort(comfort_class);
-            // Serial.printf("AI Result -> Comfort Class: %d (Prob: %.2f) | [0-COLD]: %.2f | [1-COMFORT]: %.2f | [2-WARM]: %.2f | [3-HOT]: %.2f\n",
-            //               comfort_class,
-            //               max_prob,
-            //               output->data.f[0],
-            //               output->data.f[1],
-            //               output->data.f[2],
-            //               output->data.f[3]);
         }
         vTaskDelay(pdMS_TO_TICKS(2000));
     }

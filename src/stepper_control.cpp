@@ -30,6 +30,7 @@ void stepper_init()
     long initial_steps = map(current_target_angle, -90, 90, -STEPS_PER_90_DEG, STEPS_PER_90_DEG);
     stepper.setCurrentPosition(initial_steps);
     stepper.moveTo(initial_steps);
+    stepper.disableOutputs(); // Khởi tạo ở trạng thái đứng yên: ngắt dòng cuộn dây (0W)
 
     Serial.printf("🎯 Stepper Ready: Vị trí %d° (%ld steps)\n", current_target_angle, initial_steps);
 }
@@ -42,6 +43,7 @@ void stepper_set_angle(int angle)
     
     current_target_angle = angle;
     long target_steps = map(current_target_angle, -90, 90, -STEPS_PER_90_DEG, STEPS_PER_90_DEG);
+    stepper.enableOutputs();
     stepper.moveTo(target_steps);
 
     need_save = true;
@@ -51,6 +53,7 @@ void stepper_set_angle(int angle)
 void stepper_toggle_swing(bool enable)
 {
     swing_mode_enable = enable;
+    stepper.enableOutputs();
     if (enable) {
         stepper.moveTo(STEPS_PER_90_DEG); // Quét sang +90 độ trước
         swing_direction = 1;
@@ -63,12 +66,18 @@ void stepper_calibrate_zero()
 {
     stepper.setCurrentPosition(0);
     current_target_angle = 0;
+    stepper.disableOutputs();
     
     stepper_prefs.begin("step_cfg", false);
     stepper_prefs.putInt("last_angle", 0);
     stepper_prefs.end();
     
     Serial.println("⚙️ Đã Calib vị trí hiện tại thành 0°!");
+}
+
+bool stepper_is_active()
+{
+    return swing_mode_enable || (stepper.distanceToGo() != 0);
 }
 
 void task_stepper(void *pvParameters)
@@ -89,20 +98,30 @@ void task_stepper(void *pvParameters)
                     swing_direction = 1;
                 }
             }
+            stepper.run();
         }
         else
         {
-            if (need_save && (stepper.distanceToGo() == 0) && (millis() - last_save_time > 2000))
+            if (stepper.distanceToGo() != 0)
             {
-                stepper_prefs.begin("step_cfg", false);
-                stepper_prefs.putInt("last_angle", current_target_angle);
-                stepper_prefs.end();
-                need_save = false;
-                Serial.printf("💾 Đã lưu góc %d° vào NVS\n", current_target_angle);
+                stepper.run();
+            }
+            else
+            {
+                // Khi đứng yên và không đảo gió: ngắt điện cuộn dây để triệt tiêu holding current (0W)
+                stepper.disableOutputs();
+
+                if (need_save && (millis() - last_save_time > 2000))
+                {
+                    stepper_prefs.begin("step_cfg", false);
+                    stepper_prefs.putInt("last_angle", current_target_angle);
+                    stepper_prefs.end();
+                    need_save = false;
+                    Serial.printf("💾 Đã lưu góc %d° vào NVS\n", current_target_angle);
+                }
             }
         }
 
-        stepper.run();
         vTaskDelay(2 / portTICK_PERIOD_MS);
     }
 }

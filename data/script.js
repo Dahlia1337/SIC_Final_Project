@@ -35,7 +35,52 @@ window.addEventListener('DOMContentLoaded', () => {
   loadLiveCache();
   initChart();
   initWebSocket();
+  initTabs();
 });
+
+/* ==========================================================================
+   0. TAB NAVIGATION SYSTEM
+   ========================================================================== */
+function switchTab(tabId) {
+  const tabs = ['control', 'health', 'ai', 'chart'];
+  if (!tabs.includes(tabId)) tabId = 'control';
+
+  tabs.forEach(t => {
+    const btn = document.getElementById(`tab-btn-${t}`);
+    const content = document.getElementById(`tab-content-${t}`);
+    if (btn) {
+      if (t === tabId) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+    if (content) {
+      if (t === tabId) content.classList.add('active');
+      else content.classList.remove('active');
+    }
+  });
+
+  try {
+    localStorage.setItem('active_dashboard_tab', tabId);
+  } catch (e) {}
+
+  // Khi chuyển sang tab chart, resize để Chart.js hiển thị đúng kích thước
+  if (tabId === 'chart' && realtimeChart) {
+    setTimeout(() => {
+      realtimeChart.resize();
+      realtimeChart.update('none');
+    }, 60);
+  }
+}
+
+function initTabs() {
+  let savedTab = 'control';
+  try {
+    const s = localStorage.getItem('active_dashboard_tab');
+    if (s && ['control', 'health', 'ai', 'chart'].includes(s)) {
+      savedTab = s;
+    }
+  } catch (e) {}
+  switchTab(savedTab);
+}
 
 /* ==========================================================================
    1. WEBSOCKET MANAGEMENT
@@ -86,9 +131,14 @@ function onMessage(event) {
         updateComfortUI(data.is_auto, data.comfort, data.comfort_label);
       }
 
-      // Cập nhật điện năng tiêu thụ từng tác vụ
-      if (data.power) {
-        updatePowerUI(data.power);
+      // Cập nhật phân tích tiện nghi nhiệt & sức khỏe
+      if (data.health) {
+        updateHealthUI(data.health);
+      }
+
+      // Cập nhật TinyML AI Intelligence Panel
+      if (data.ai) {
+        updateAIPanel(data.ai);
       }
     }
 
@@ -118,65 +168,238 @@ function onMessage(event) {
 }
 
 /* ==========================================================================
-   3. POWER & ENERGY MONITORING UI
+   2.1 THERMAL COMFORT & HEALTH ANALYTICS UI
    ========================================================================== */
-function updatePowerUI(power) {
-  const pTotal = parseFloat(power.total) || 0.0;
-  const pFan = parseFloat(power.fan) || 0.0;
-  const pStepper = parseFloat(power.stepper) || 0.0;
-  const pEsp = parseFloat(power.esp) || 0.50;
-  const pPeri = parseFloat(power.peri) || 0.20;
-  const energyWh = parseFloat(power.energy_wh) || 0.0;
-  const savedPct = parseFloat(power.saved_pct) || 0.0;
+function updateHealthUI(health) {
+  if (!health) return;
 
-  // Hiển thị tổng quan
-  const elTotal = document.getElementById('val-p-total');
-  const elEnergy = document.getElementById('val-energy-wh');
-  const elKwh = document.getElementById('val-energy-kwh');
-  const elCost = document.getElementById('val-cost');
-  const elSaved = document.getElementById('val-saved-pct');
+  const heatIndex = parseFloat(health.hi) || 0.0;
+  const dewPoint = parseFloat(health.dp) || 0.0;
+  const score = parseFloat(health.score) || 100.0;
+  const hiLvl = parseInt(health.hi_lvl) || 0;
+  const moldLvl = parseInt(health.mold_lvl) || 0;
 
-  if (elTotal) elTotal.innerText = pTotal.toFixed(2);
-  if (elEnergy) elEnergy.innerText = energyWh.toFixed(2);
-  
-  const kwh = energyWh / 1000.0;
-  if (elKwh) elKwh.innerText = `≈ ${kwh.toFixed(4)} kWh`;
+  const pctCold = isNaN(parseFloat(health.p_cld)) ? 0.0 : parseFloat(health.p_cld);
+  const pctComfort = isNaN(parseFloat(health.p_cmf)) ? 100.0 : parseFloat(health.p_cmf);
+  const pctWarm = isNaN(parseFloat(health.p_wrm)) ? 0.0 : parseFloat(health.p_wrm);
+  const pctHot = isNaN(parseFloat(health.p_hot)) ? 0.0 : parseFloat(health.p_hot);
 
-  // Chi phí tiền điện (2000đ / kWh)
-  const cost = Math.round(kwh * 2000);
-  if (elCost) elCost.innerText = cost.toLocaleString('vi-VN');
+  const cntCold = health.c_cld || 0;
+  const cntComfort = health.c_cmf || 0;
+  const cntWarm = health.c_wrm || 0;
+  const cntHot = health.c_hot || 0;
+  const totalSamples = health.total || 0;
 
-  if (elSaved) elSaved.innerText = `${savedPct.toFixed(1)}%`;
+  // 1. Cập nhật Heat Index & Thẻ cảnh báo rủi ro NOAA
+  setText('val-heat-index', heatIndex.toFixed(1));
+  const elPillHi = document.getElementById('pill-hi-risk');
+  const elNoteHi = document.getElementById('val-hi-note');
+  if (elPillHi) {
+    elPillHi.className = 'risk-pill';
+    if (hiLvl === 0 || heatIndex < 27.0) {
+      elPillHi.classList.add('safe');
+      elPillHi.innerText = 'An Toàn';
+      if (elNoteHi) elNoteHi.innerText = 'Môi trường an toàn, lý tưởng cho cơ thể (< 27°C)';
+    } else if (hiLvl === 1 || heatIndex < 32.0) {
+      elPillHi.classList.add('caution');
+      elPillHi.innerText = 'Thận Trọng';
+      if (elNoteHi) elNoteHi.innerText = 'Có thể mệt mỏi nếu tiếp xúc lâu hoặc vận động (27–32°C)';
+    } else if (hiLvl === 2 || heatIndex < 41.0) {
+      elPillHi.classList.add('extreme-caution');
+      elPillHi.innerText = 'Đặc Biệt Thận Trọng';
+      if (elNoteHi) elNoteHi.innerText = 'Nguy cơ say nắng, chuột rút & kiệt sức vì nhiệt (32–41°C)';
+    } else if (hiLvl === 3 || heatIndex < 54.0) {
+      elPillHi.classList.add('danger');
+      elPillHi.innerText = 'Nguy Hiểm';
+      if (elNoteHi) elNoteHi.innerText = 'Dễ bị kiệt sức, chuột rút; có thể sốc nhiệt nếu kéo dài (41–54°C)';
+    } else {
+      elPillHi.classList.add('extreme');
+      elPillHi.innerText = 'Cực Kỳ Nguy Hiểm!';
+      if (elNoteHi) elNoteHi.innerText = 'Nguy cơ sốc nhiệt & đột quỵ nhiệt rất cao (≥ 54°C)';
+    }
+  }
 
-  // Phân bổ phần trăm các tác vụ
-  const pctFan = pTotal > 0 ? (pFan / pTotal) * 100 : 0;
-  const pctStepper = pTotal > 0 ? (pStepper / pTotal) * 100 : 0;
-  const pctEsp = pTotal > 0 ? (pEsp / pTotal) * 100 : 0;
-  const pctPeri = pTotal > 0 ? (pPeri / pTotal) * 100 : 0;
+  // 2. Cập nhật Điểm Chất Lượng Vi Khí Hậu (Comfort Score)
+  setText('val-score-num', score.toFixed(0));
+  setText('val-score-pct', `${score.toFixed(0)}%`);
+  const elPillScore = document.getElementById('pill-score-grade');
+  const elNoteScore = document.getElementById('val-score-note');
+  if (elPillScore) {
+    if (score >= 80) {
+      elPillScore.innerText = 'Xuất Sắc';
+      if (elNoteScore) elNoteScore.innerText = 'Đạt chuẩn tiện nghi ASHRAE 55 cao';
+    } else if (score >= 65) {
+      elPillScore.innerText = 'Tốt';
+      if (elNoteScore) elNoteScore.innerText = 'Vi khí hậu ổn định trong phòng';
+    } else if (score >= 50) {
+      elPillScore.innerText = 'Trung Bình';
+      if (elNoteScore) elNoteScore.innerText = 'Cần luân chuyển thông gió thêm';
+    } else {
+      elPillScore.innerText = 'Kém';
+      if (elNoteScore) elNoteScore.innerText = 'Cần tăng cường làm mát ngay';
+    }
+  }
 
-  // Cập nhật thanh Segmented Progress Bar
-  const barFan = document.getElementById('bar-fan');
-  const barStepper = document.getElementById('bar-stepper');
-  const barEsp = document.getElementById('bar-esp');
-  const barPeri = document.getElementById('bar-peri');
+  // 3. Cập nhật Nhiệt Độ Điểm Sương & Nguy cơ Nồm ẩm
+  setText('val-dew-point', dewPoint.toFixed(1));
+  const elPillMold = document.getElementById('pill-mold-risk');
+  const elNoteMold = document.getElementById('val-mold-note');
+  if (elPillMold) {
+    elPillMold.className = 'risk-pill';
+    if (moldLvl === 0) {
+      elPillMold.classList.add('safe');
+      elPillMold.innerText = 'Khô Thoáng';
+      if (elNoteMold) elNoteMold.innerText = 'Ít nguy cơ ngưng tụ nấm mốc';
+    } else if (moldLvl === 1) {
+      elPillMold.classList.add('caution');
+      elPillMold.innerText = 'Cảnh Giác';
+      if (elNoteMold) elNoteMold.innerText = 'Độ ẩm cao, nên bật quạt thông gió';
+    } else {
+      elPillMold.classList.add('danger');
+      elPillMold.innerText = 'Nồm Ẩm Cao!';
+      if (elNoteMold) elNoteMold.innerText = 'Dễ đọng sương sàn nhà và sinh mốc';
+    }
+  }
 
-  if (barFan) barFan.style.width = `${pctFan.toFixed(1)}%`;
-  if (barStepper) barStepper.style.width = `${pctStepper.toFixed(1)}%`;
-  if (barEsp) barEsp.style.width = `${pctEsp.toFixed(1)}%`;
-  if (barPeri) barPeri.style.width = `${pctPeri.toFixed(1)}%`;
+  // 4. Cập nhật thanh Segmented Progress Bar (4 phân lớp TinyML)
+  const barCold = document.getElementById('bar-cold');
+  const barComfort = document.getElementById('bar-comfort');
+  const barWarm = document.getElementById('bar-warm');
+  const barHot = document.getElementById('bar-hot');
 
-  // Cập nhật nhãn chi tiết
-  setText('p-fan-val', `${pFan.toFixed(2)} W`);
-  setText('p-fan-pct', `(${pctFan.toFixed(0)}%)`);
+  if (barCold) barCold.style.width = `${pctCold.toFixed(1)}%`;
+  if (barComfort) barComfort.style.width = `${pctComfort.toFixed(1)}%`;
+  if (barWarm) barWarm.style.width = `${pctWarm.toFixed(1)}%`;
+  if (barHot) barHot.style.width = `${pctHot.toFixed(1)}%`;
 
-  setText('p-stepper-val', `${pStepper.toFixed(2)} W`);
-  setText('p-stepper-pct', `(${pctStepper.toFixed(0)}%)`);
+  // 5. Cập nhật nhãn đếm và tỷ lệ
+  setText('health-sample-count', `${totalSamples.toLocaleString('vi-VN')} chu kỳ đo`);
+  setText('cnt-cold-val', `${cntCold} chu kỳ`);
+  setText('pct-cold-val', `(${pctCold.toFixed(0)}%)`);
 
-  setText('p-esp-val', `${pEsp.toFixed(2)} W`);
-  setText('p-esp-pct', `(${pctEsp.toFixed(0)}%)`);
+  setText('cnt-comfort-val', `${cntComfort} chu kỳ`);
+  setText('pct-comfort-val', `(${pctComfort.toFixed(0)}%)`);
 
-  setText('p-peri-val', `${pPeri.toFixed(2)} W`);
-  setText('p-peri-pct', `(${pctPeri.toFixed(0)}%)`);
+  setText('cnt-warm-val', `${cntWarm} chu kỳ`);
+  setText('pct-warm-val', `(${pctWarm.toFixed(0)}%)`);
+
+  setText('cnt-hot-val', `${cntHot} chu kỳ`);
+  setText('pct-hot-val', `(${pctHot.toFixed(0)}%)`);
+}
+
+/* ==========================================================================
+   3. TINYML AI INTELLIGENCE PANEL
+   ========================================================================== */
+function updateAIPanel(ai) {
+  if (!ai) return;
+
+  // 1. Confidence scores (4 lớp phân loại)
+  const probs = [
+    parseFloat(ai.p0) || 0.0,  // COLD
+    parseFloat(ai.p1) || 0.0,  // COMFORT
+    parseFloat(ai.p2) || 0.0,  // WARM
+    parseFloat(ai.p3) || 0.0   // HOT
+  ];
+  for (let i = 0; i < 4; i++) {
+    const bar = document.getElementById(`conf-bar-${i}`);
+    const pct = document.getElementById(`conf-pct-${i}`);
+    if (bar) bar.style.width = `${probs[i].toFixed(1)}%`;
+    if (pct) pct.innerText = `${probs[i].toFixed(1)}%`;
+  }
+
+  // 2. Overall Confidence (confidence cao nhất)
+  const conf = parseFloat(ai.conf) || 0.0;
+  const confBar = document.getElementById('conf-overall-bar');
+  const confPct = document.getElementById('conf-overall-pct');
+  if (confBar) {
+    confBar.style.width = `${conf.toFixed(1)}%`;
+    // Màu sắc theo độ tự tin
+    if (conf >= 80) confBar.style.background = 'linear-gradient(90deg, #10b981, #34d399)';
+    else if (conf >= 60) confBar.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+    else confBar.style.background = 'linear-gradient(90deg, #ef4444, #f87171)';
+  }
+  if (confPct) confPct.innerText = `${conf.toFixed(1)}%`;
+
+  // 3. Inference count
+  const inferCount = ai.infer || 0;
+  setText('ai-infer-count', inferCount.toLocaleString('vi-VN'));
+
+  // 4. Trend Analysis (dT/dt, dH/dt)
+  const dt = parseFloat(ai.dt) || 0.0;
+  const dh = parseFloat(ai.dh) || 0.0;
+  setText('trend-temp-val', Math.abs(dt).toFixed(2));
+  setText('trend-humi-val', Math.abs(dh).toFixed(2));
+
+  // Mũi tên & note cho nhiệt độ
+  const arrowTemp = document.getElementById('trend-temp-arrow');
+  const noteTemp = document.getElementById('trend-temp-note');
+  if (arrowTemp && noteTemp) {
+    if (dt > 0.1) {
+      arrowTemp.innerText = '↑'; arrowTemp.className = 'trend-arrow up';
+      noteTemp.innerText = 'Đang tăng nhanh';
+    } else if (dt < -0.1) {
+      arrowTemp.innerText = '↓'; arrowTemp.className = 'trend-arrow down';
+      noteTemp.innerText = 'Đang giảm nhanh';
+    } else {
+      arrowTemp.innerText = '→'; arrowTemp.className = 'trend-arrow stable';
+      noteTemp.innerText = 'Ổn định';
+    }
+  }
+
+  // Mũi tên & note cho độ ẩm
+  const arrowHumi = document.getElementById('trend-humi-arrow');
+  const noteHumi = document.getElementById('trend-humi-note');
+  if (arrowHumi && noteHumi) {
+    if (dh > 0.5) {
+      arrowHumi.innerText = '↑'; arrowHumi.className = 'trend-arrow up';
+      noteHumi.innerText = 'Độ ẩm đang tăng';
+    } else if (dh < -0.5) {
+      arrowHumi.innerText = '↓'; arrowHumi.className = 'trend-arrow down';
+      noteHumi.innerText = 'Độ ẩm đang giảm';
+    } else {
+      arrowHumi.innerText = '→'; arrowHumi.className = 'trend-arrow stable';
+      noteHumi.innerText = 'Ổn định';
+    }
+  }
+
+  // 5. Heap RAM (esp_get_free_heap_size)
+  const heap = parseInt(ai.heap) || 0;
+  const heapKB = (heap / 1024).toFixed(1);
+  setText('sys-heap-val', `${heapKB} KB`);
+
+  // 6. Phân bổ tích lũy
+  const total = parseInt(ai.total) || 0;
+  const cCold = parseInt(ai.c_cld) || 0;
+  const cComf = parseInt(ai.c_cmf) || 0;
+  const cWarm = parseInt(ai.c_wrm) || 0;
+  const cHot  = parseInt(ai.c_hot) || 0;
+
+  setText('ai-dist-total', `${total.toLocaleString('vi-VN')} suy luận`);
+
+  if (total > 0) {
+    const pCold = (cCold / total * 100);
+    const pComf = (cComf / total * 100);
+    const pWarm = (cWarm / total * 100);
+    const pHot  = (cHot  / total * 100);
+
+    const barCold = document.getElementById('ai-bar-cold');
+    const barComf = document.getElementById('ai-bar-comfort');
+    const barWarm = document.getElementById('ai-bar-warm');
+    const barHot  = document.getElementById('ai-bar-hot');
+    if (barCold) barCold.style.width = `${pCold.toFixed(1)}%`;
+    if (barComf) barComf.style.width = `${pComf.toFixed(1)}%`;
+    if (barWarm) barWarm.style.width = `${pWarm.toFixed(1)}%`;
+    if (barHot)  barHot.style.width  = `${pHot.toFixed(1)}%`;
+
+    setText('ai-cnt-cold',    cCold);
+    setText('ai-pct-cold',    `${pCold.toFixed(0)}%`);
+    setText('ai-cnt-comfort', cComf);
+    setText('ai-pct-comfort', `${pComf.toFixed(0)}%`);
+    setText('ai-cnt-warm',    cWarm);
+    setText('ai-pct-warm',    `${pWarm.toFixed(0)}%`);
+    setText('ai-cnt-hot',     cHot);
+    setText('ai-pct-hot',     `${pHot.toFixed(0)}%`);
+  }
 }
 
 function setText(id, text) {

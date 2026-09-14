@@ -66,7 +66,7 @@ bool startSTA()
     else
     {
         Serial.println("❌ STA Kết nối Thất bại/Timeout.");
-        return true;
+        return false;
     }
 }
 

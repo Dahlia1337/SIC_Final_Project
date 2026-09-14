@@ -1,0 +1,23 @@
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .control-grid {
+    grid-template-columns: 1fr;
+  }
+  .value-display {
+    font-size: 1.8rem;
+  }
+  .chart-canvas-wrapper {
+    height: 220px;
+  }
+  .timeframe-buttons {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .tf-btn {
+    padding: 5px 8px;
+    font-size: 0.7rem;
+  }
+}
