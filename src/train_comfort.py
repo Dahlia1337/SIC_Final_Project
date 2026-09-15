@@ -75,55 +75,92 @@ np.random.seed(42)
 df['delta_temp'] = np.random.normal(0, 0.15, size=len(df)).clip(-1.5, 1.5)
 df['delta_humi'] = np.random.normal(0, 0.4, size=len(df)).clip(-5.0, 5.0)
 
-# Cân bằng dữ liệu (Balanced Sampling: 5.000 mẫu cho mỗi class -> 20.000 mẫu tổng cộng)
-dfs = []
-for c in range(4):
-    sub = df[df['comfort_class'] == c]
-    dfs.append(sub.sample(n=min(5000, len(sub)), random_state=42, replace=(len(sub) < 5000)))
-df_clean = pd.concat(dfs).sample(frac=1.0, random_state=42).reset_index(drop=True)
-
 # ==========================================
-# 3. CHUẨN HÓA DỮ LIỆU & XUẤT CSV
+# 3. PHÂN CHIA TRAIN/VAL TRƯỚC (TRÁNH DATA LEAKAGE KINH ĐIỂN)
 # ==========================================
-print("--> [3/6] Chuẩn hóa đặc trưng & xuất 2 file CSV...")
+print("--> [3/6] Phân chia Train/Validation trước (Data Leakage Prevention)...")
 features = ['temperature_c', 'humidity_pct', 'delta_temp', 'delta_humi']
 
-means = df_clean[features].mean()
-stds = df_clean[features].std()
+# Để dữ liệu không bị lệch áp đảo bởi lớp COMFORT (68k mẫu), trước tiên ta giới hạn
+# số lượng tối đa của các lớp đa số (Undersample không lặp lại) trên tập dữ liệu gốc
+max_samples_per_class = 6000
+dfs_pool = []
+for c in range(4):
+    sub = df[df['comfort_class'] == c]
+    if len(sub) > max_samples_per_class:
+        dfs_pool.append(sub.sample(n=max_samples_per_class, random_state=42, replace=False))
+    else:
+        dfs_pool.append(sub.copy())
+df_pool = pd.concat(dfs_pool).sample(frac=1.0, random_state=42).reset_index(drop=True)
 
-df_normalized = df_clean.copy()
-for col in features:
-    df_normalized[f'{col}_norm'] = (df_clean[col] - means[col]) / stds[col]
+print("Phân bố mẫu gốc hợp lệ trước khi chia tách:")
+for c in range(4):
+    cnt = (df_pool['comfort_class'] == c).sum()
+    print(f"   Class {c} ({label_map[c]:10s}): {cnt} mẫu")
+
+X_raw = df_pool[features].values.astype(np.float32)
+y_raw = df_pool['comfort_class'].values.astype(np.int32)
+
+# THỨ TỰ ĐÚNG: Chia Train/Validation TRƯỚC TIÊN trên dữ liệu gốc hoàn toàn không trùng lặp
+X_train_raw, X_val, y_train_raw, y_val = train_test_split(
+    X_raw, y_raw, test_size=0.15, random_state=42, stratify=y_raw
+)
+
+print(f"\nSố lượng mẫu tập Validation (100% dữ liệu thực, không lặp lại, không data leakage):")
+for c in range(4):
+    cnt = np.sum(y_val == c)
+    print(f"   Class {c} ({label_map[c]:10s}): {cnt} mẫu")
+
+# CHỈ OVERSAMPLE TRÊN TẬP TRAIN:
+# Cân bằng các lớp trong tập Train lên 5.000 mẫu/lớp để mạng nơ-ron học đồng đều
+target_train_samples = 5000
+X_train_list = []
+y_train_list = []
+
+for c in range(4):
+    idx_c = np.where(y_train_raw == c)[0]
+    X_c = X_train_raw[idx_c]
+    n_c = len(X_c)
+    
+    if n_c < target_train_samples:
+        # Oversample có lặp lại CHỈ trong nội bộ tập train
+        np.random.seed(42 + c)
+        oversample_idx = np.random.choice(n_c, size=target_train_samples, replace=True)
+        X_train_list.append(X_c[oversample_idx])
+        y_train_list.append(np.full(target_train_samples, c, dtype=np.int32))
+    else:
+        # Nếu đã đủ hoặc dư thì lấy ngẫu nhiên 5000 mẫu không lặp lại
+        np.random.seed(42 + c)
+        sample_idx = np.random.choice(n_c, size=target_train_samples, replace=False)
+        X_train_list.append(X_c[sample_idx])
+        y_train_list.append(np.full(target_train_samples, c, dtype=np.int32))
+
+X_train = np.vstack(X_train_list)
+y_train = np.concatenate(y_train_list)
+
+# Trộn ngẫu nhiên (shuffle) tập train
+np.random.seed(42)
+shuffle_perm = np.random.permutation(len(y_train))
+X_train = X_train[shuffle_perm]
+y_train = y_train[shuffle_perm]
+
+print(f"\nPhân bố tập Train sau khi oversample độc lập (Tổng {len(y_train)} mẫu):")
+for c in range(4):
+    cnt = np.sum(y_train == c)
+    print(f"   Class {c} ({label_map[c]:10s}): {cnt} mẫu")
 
 # Xuất ra thư mục src nếu chạy từ root
 out_dir = "src" if os.path.isdir("src") else "."
-df_clean[['temperature_c', 'humidity_pct', 'delta_temp', 'delta_humi', 'comfort_class', 'comfort_label']].to_csv(
+df_pool[['temperature_c', 'humidity_pct', 'delta_temp', 'delta_humi', 'comfort_class', 'comfort_label']].to_csv(
     os.path.join(out_dir, "ashrae_cleaned_comfort.csv"), index=False, encoding='utf-8'
 )
-norm_cols = ['temperature_c_norm', 'humidity_pct_norm', 'delta_temp_norm', 'delta_humi_norm', 'comfort_class', 'comfort_label']
-df_normalized[norm_cols].to_csv(
-    os.path.join(out_dir, "ashrae_normalized_comfort.csv"), index=False, encoding='utf-8'
-)
-
-print(f"    - Đã lưu {os.path.join(out_dir, 'ashrae_cleaned_comfort.csv')}")
-print(f"    - Đã lưu {os.path.join(out_dir, 'ashrae_normalized_comfort.csv')}")
-print("Phân bố số lượng các lớp đã cân bằng:")
-for c in range(4):
-    print(f"   Class {c} ({label_map[c]}): {(df_clean['comfort_class'] == c).sum()} mẫu")
 
 # ==========================================
 # 4. HUẤN LUYỆN MẠNG NƠ-RON TINYML
 # ==========================================
 print("\n--> [4/6] Bắt đầu huấn luyện mô hình Keras...")
-X = df_clean[features].values.astype(np.float32)
-y = df_clean['comfort_class'].values.astype(np.int32)
 
-# Phân chia train/val (stratified theo y) để tránh data leakage
-X_train, X_val, y_train, y_val = train_test_split(
-    X, y, test_size=0.15, random_state=42, stratify=y
-)
-
-# Nhúng layer Normalization trực tiếp vào Model (chỉ adapt trên X_train để tránh data leakage)
+# Nhúng layer Normalization trực tiếp vào Model (CHỈ adapt trên X_train để triệt tiêu Data Leakage)
 norm_layer = tf.keras.layers.Normalization(axis=-1)
 norm_layer.adapt(X_train)
 

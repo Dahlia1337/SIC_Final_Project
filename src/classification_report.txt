@@ -1,10 +1,10 @@
               precision    recall  f1-score   support
 
-        COLD      0.886     0.981     0.931       641
-     COMFORT      0.920     0.785     0.847       750
-  WARM_HUMID      0.854     0.891     0.872       750
-         HOT      0.894     0.917     0.905       339
+        COLD      0.900     0.945     0.922       641
+     COMFORT      0.937     0.806     0.866       900
+  WARM_HUMID      0.866     0.907     0.886       900
+         HOT      0.839     0.968     0.899       339
 
-    accuracy                          0.886      2480
-   macro avg      0.889     0.894     0.889      2480
-weighted avg      0.888     0.886     0.884      2480
+    accuracy                          0.890      2780
+   macro avg      0.886     0.906     0.893      2780
+weighted avg      0.894     0.890     0.890      2780
