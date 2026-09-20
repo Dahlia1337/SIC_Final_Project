@@ -53,7 +53,6 @@ void task_lcd(void *pvParameters)
         }
         else
         {
-            lcd.clear();
             const char* comfort_labels[] = {"COLD", "COMF", "WARM", "HOT "};
 
             // Dòng 1: Nhiệt độ + Độ ẩm
@@ -61,7 +60,7 @@ void task_lcd(void *pvParameters)
             snprintf(line1, sizeof(line1), "T:%.0f\337C H:%.0f%% [%c]", glob_temperature, glob_humidity, mode_char);
 
             // Dòng 2: Chế độ, tốc độ quạt và Nhãn AI
-            snprintf(line2, sizeof(line2), "F:%2d%%   AI:%s", fan_speed, comfort_labels[comfort_class]);
+            snprintf(line2, sizeof(line2), "F:%2d%%   AI:%s  ", fan_speed, comfort_labels[comfort_class]);
         }
 
         lcd.setCursor(0, 0);
